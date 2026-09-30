@@ -12,7 +12,8 @@ using OMStationary.Api.Services;
 namespace OMStationary.Api.Controllers;
 
 [ApiController, Route("api/payments")]
-public sealed class PaymentsController(OmDbContext db, IConfiguration configuration, IPaymentGateway gateway) : ControllerBase
+public sealed class PaymentsController(OmDbContext db, IConfiguration configuration, IPaymentGateway gateway,
+    NotificationService notifications) : ControllerBase
 {
     [HttpGet("options")]
     public IActionResult Options() => Ok(new
@@ -41,6 +42,7 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
         payment.QrData = intent.QrData;
         payment.QrImageBase64 = intent.QrImageBase64;
         payment.Status = "Pending";
+        notifications.AddForOrder(order, "PaymentPending");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { configured = true, provider = intent.Provider, status = intent.Status, qrData = intent.QrData, qrImageBase64 = intent.QrImageBase64 });
     }
@@ -67,6 +69,7 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
             return Ok(new { status = "ReviewRequired", paymentStatus = order.PaymentStatus, verified = true, detail = "Paytm amount did not match the saved order total." });
         }
 
+        var previousPaymentStatus = payment.Status;
         payment.Status = gatewayStatus.Paid ? "Paid" : gatewayStatus.Status is "TXN_FAILURE" ? "Failed" : "Pending";
         if (!string.IsNullOrWhiteSpace(gatewayStatus.ProviderReference)) payment.ProviderReference = gatewayStatus.ProviderReference;
         if (gatewayStatus.Paid)
@@ -77,9 +80,16 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
             {
                 order.Status = "Confirmed";
                 db.OrderStatusHistory.Add(new OrderStatusHistory { OrderId = order.Id, Status = "Confirmed", Note = "Paytm status API verified payment." });
+                notifications.AddForOrder(order, "Confirmed");
             }
             var invoice = await db.Invoices.FirstOrDefaultAsync(x => x.OrderId == order.Id, cancellationToken);
             if (invoice is not null) invoice.PaymentStatus = "Paid";
+            // Idempotent: only tell the customer once.
+            if (previousPaymentStatus != "Paid") notifications.AddForOrder(order, "PaymentSuccess");
+        }
+        else if (payment.Status == "Failed" && previousPaymentStatus != "Failed")
+        {
+            notifications.AddForOrder(order, "PaymentFailed");
         }
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { status = payment.Status, order.Status, order.PaymentStatus, verified = true,

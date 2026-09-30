@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OMStationary.Api.Data;
 
@@ -11,9 +12,11 @@ using OMStationary.Api.Data;
 namespace OMStationary.Api.Migrations
 {
     [DbContext(typeof(OmDbContext))]
-    partial class OmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930065632_OmStationaryDirectCommerce")]
+    partial class OmStationaryDirectCommerce
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

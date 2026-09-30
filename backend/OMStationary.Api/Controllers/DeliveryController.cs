@@ -46,15 +46,16 @@ public class DeliveryController(OmDbContext db, IConfiguration configuration, Fu
             request.Items.Select(x => new RequestedProduct(x.ProductId, x.Quantity)).ToArray()), cancellationToken);
         if (candidate is not null)
         {
-            var lineItems = request.Items.Select(i => new { i.ProductId, products[i.ProductId].Name, i.Quantity, UnitPrice = candidate.Inventory[i.ProductId].SellingPrice }).ToArray();
+            var lineItems = request.Items.Select(i => new { i.ProductId, products[i.ProductId].Name, i.Quantity, UnitPrice = candidate.UnitPrices[i.ProductId] }).ToArray();
             var coupon = string.IsNullOrWhiteSpace(request.CouponCode) ? null : await coupons.Calculate(request.CouponCode, candidate.Subtotal, cancellationToken);
             if (coupon is { Valid: false }) return Ok(new { available = false, reason = coupon.Reason });
             var discount = coupon?.Discount ?? 0;
             var tax = TaxCalculator.Calculate(candidate.Subtotal - discount, configuration.GetValue<decimal>("Tax:RatePercent"));
             return Ok(new { available = true, city = request.City.Trim(), items = lineItems, subtotal = candidate.Subtotal,
                 deliveryCharge = candidate.DeliveryFee, couponCode = coupon?.Code, discountAmount = discount,
-                taxAmount = tax, total = candidate.Total - discount + tax, estimatedDeliveryMinutes = candidate.EstimatedDeliveryMinutes });
+                taxAmount = tax, total = candidate.Total - discount + tax, estimatedDeliveryMinutes = candidate.EstimatedDeliveryMinutes,
+                source = candidate.Shop?.Name ?? "OM Stationary" });
         }
-        return Ok(new { available = false, reason = "No verified partner shop has all requested items and quantities in stock." });
+        return Ok(new { available = false, reason = "OM Stationary does not have all requested items and quantities in stock right now." });
     }
 }
