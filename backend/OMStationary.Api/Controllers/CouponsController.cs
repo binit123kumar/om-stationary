@@ -42,3 +42,4 @@ public sealed class CouponsController(OmDbContext db, CouponService coupons) : C
         return Created($"/api/coupons/{coupon.Id}", new { coupon.Id, coupon.Code, coupon.DiscountType, coupon.DiscountValue, coupon.IsActive });
     }
 }
+

@@ -58,3 +58,4 @@ public class ProductsController : ControllerBase
         return await Get(product.Id);
     }
 }
+

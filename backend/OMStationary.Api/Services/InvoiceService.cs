@@ -194,3 +194,4 @@ internal static class InvoicePdf
         return output.ToArray();
     }
 }
+

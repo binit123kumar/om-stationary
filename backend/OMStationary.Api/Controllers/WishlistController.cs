@@ -101,3 +101,4 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
         return Ok(new { productId, moved = true });
     }
 }
+

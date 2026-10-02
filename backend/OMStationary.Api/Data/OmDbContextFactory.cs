@@ -43,3 +43,4 @@ public sealed class OmDbContextFactory : IDesignTimeDbContextFactory<OmDbContext
         return Directory.GetCurrentDirectory();
     }
 }
+

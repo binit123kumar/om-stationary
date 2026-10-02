@@ -41,3 +41,4 @@ public sealed class TokenService(IConfiguration configuration)
 
     private string SigningKey() => configuration["Jwt:SigningKey"] ?? throw new InvalidOperationException("JWT signing key is not configured.");
 }
+

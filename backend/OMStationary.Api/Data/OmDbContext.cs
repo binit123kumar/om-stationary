@@ -172,3 +172,4 @@ public class OmDbContext : DbContext
         modelBuilder.Entity<Notification>().Property(x => x.Message).HasMaxLength(600);
     }
 }
+

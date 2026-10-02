@@ -33,3 +33,4 @@ public sealed class CouponService(OmDbContext db)
             x.StartsAt <= DateTime.UtcNow && x.ExpiresAt >= DateTime.UtcNow)
             .ExecuteUpdateAsync(x => x.SetProperty(c => c.UsageCount, c => c.UsageCount + 1), cancellationToken);
 }
+

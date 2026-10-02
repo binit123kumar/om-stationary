@@ -54,3 +54,4 @@ public static class NotificationServiceNames
 {
     public const string InApp = "InApp";
 }
+

@@ -99,3 +99,4 @@ public sealed class DeliveryOperationsController(OmDbContext db, SettlementServi
         return Ok(new { delivery.Id, DeliveryStatus = delivery.Status, order.OrderNumber, OrderStatus = order.Status });
     }
 }
+

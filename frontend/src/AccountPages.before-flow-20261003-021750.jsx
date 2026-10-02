@@ -4,94 +4,46 @@ import { apiBase, apiFetch, clearSession, mapServerCart, readSession, saveSessio
 import './account-pages.css';
 
 export function LoginPage({ onAuth, register = false }) {
-  const location = useLocation();
-  const returnTo = new URLSearchParams(location.search).get('return') || '/account';
-  const [error,setError]=useState('');
-  const [busy,setBusy]=useState(false);
-  const [success,setSuccess]=useState(false);
-
-  const submit=async event=>{
-    event.preventDefault();
-    const formElement=event.currentTarget;
-    setBusy(true);setError('');
-    const form=new FormData(formElement);
-    const body=register
-      ? {email:form.get('email'),phone:form.get('phone'),fullName:form.get('name'),password:form.get('password')}
-      : {email:form.get('email'),password:form.get('password')};
-
-    try{
-      const response=await fetch(`${apiBase}/api/auth/${register?'register':'login'}`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(body)
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async event => {
+    event.preventDefault(); setBusy(true); setError('');
+    const form = new FormData(event.currentTarget);
+    const body = register
+      ? { email: form.get('email'), phone: form.get('phone'), fullName: form.get('name'), password: form.get('password') }
+      : { email: form.get('email'), password: form.get('password') };
+    try {
+      const response = await fetch(`${apiBase}/api/auth/${register ? 'register' : 'login'}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.detail||data.title||(register?'Registration failed.':'Sign in failed.'));
-
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Sign in failed. Check your details and try again.');
       saveSession(data);
-
-      let cart=[];
-      try{
-        const guest=JSON.parse(localStorage.getItem('omcart')||'[]');
-        const merged=await apiFetch('/api/cart/merge',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({items:Array.isArray(guest)?guest.map(item=>({productId:item.id,quantity:item.q})):[]})
-        },data.accessToken);
-        if(merged.ok){
-          const result=await merged.json();
-          cart=mapServerCart(result.items);
-        }
-      }catch{}
-
-      onAuth(data.user,cart);
-
-      if(register){
-        formElement.reset();
-        setSuccess(true);
-        setTimeout(()=>{window.location.href=returnTo||'/';},1300);
-      }else{
-        window.location.href=returnTo||'/account';
-      }
-    }catch(e){
-      setError(e.message||'Could not connect to the account service.');
-    }finally{
-      setBusy(false);
-    }
+      let cart = [];
+      try {
+        const guest = JSON.parse(localStorage.getItem('omcart') || '[]');
+        const merged = await apiFetch('/api/cart/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: Array.isArray(guest) ? guest.map(item => ({ productId: item.id, quantity: item.q })) : [] }) }, data.accessToken);
+        if (merged.ok) { const result = await merged.json(); cart = mapServerCart(result.items); }
+      } catch { /* Keep the signed-in session usable if a saved guest cart cannot be merged. */ }
+      if (register) { onAuth(data.user, cart); window.location.href = "/account"; return; } onAuth(data.user, cart); window.location.href = "/account";
+    } catch (e) { setError(e.message || 'Could not connect to the account service.'); }
+    finally { setBusy(false); }
   };
-
-  return <section className="auth-3d-page">
-    <div className="auth-3d-orb orb-a"></div><div className="auth-3d-orb orb-b"></div>
-    <div className="auth-3d-card">
-      <div className="auth-brand-3d"><span>OM</span><div><b>OM STATIONARY</b><small>Everything you need, one place.</small></div></div>
-      <small className="auth-kicker">{register?'NEW CUSTOMER':'WELCOME BACK'}</small>
-      <h1>{register?'Create your account':'Sign in to continue'}</h1>
-      <p className="auth-sub">{register?'Join OM Stationary and keep your cart, addresses and orders together.':'Sign in to continue your shopping securely.'}</p>
-
-      <form className="auth-3d-form" onSubmit={submit}>
-        {register&&<label>Full name<input name="name" required maxLength="120" autoComplete="name" placeholder="Your full name"/></label>}
-        <label>Email address<input name="email" type="email" required maxLength="254" autoComplete="email" placeholder="you@example.com"/></label>
-        {register&&<label>Mobile number<input name="phone" type="tel" required maxLength="20" autoComplete="tel" placeholder="Mobile number"/></label>}
-        <label>Password<input name="password" type="password" required minLength={register?4:1} maxLength="128" autoComplete={register?'new-password':'current-password'} placeholder="Password"/></label>
-        {register&&<label className="auth-check"><input type="checkbox" required/> I agree to the Terms & Conditions</label>}
-        {error&&<p className="form-error" role="alert">{error}</p>}
-        <button className="btn wide" disabled={busy}>{busy?'Please waitâ€¦':register?'Sign Up':'Login'}</button>
-      </form>
-
-      <p className="auth-switch">{register?'Already have an account?':'New to OM Stationary?'} <Link to={register?'/login':'/register'}>{register?'Login':'Create account'}</Link></p>
-    </div>
-
-    {success&&<div className="success-modal-backdrop">
-      <div className="success-modal">
-        <div className="success-check"><CheckCircle2 size={48}/></div>
-        <small>OM STATIONARY</small>
-        <h2>Successfully Registered!</h2>
-        <p>Your account has been created successfully.</p>
-        <button className="btn wide" onClick={()=>window.location.href=returnTo||'/'}>Go to Shopping</button>
-      </div>
-    </div>}
-  </section>
+  return <section className="account-page"><div className="panel auth-panel"><small>OM STATIONARY ACCOUNT</small><h1>{register ? 'Create your account' : 'Welcome back'}</h1>
+    <p>{register ? 'Save addresses and view your orders on this device.' : 'Sign in to view saved addresses and account orders.'}</p>
+    <form className="account-form" onSubmit={submit}>
+      {register && <label>Full name<input name="name" required maxLength="120" autoComplete="name"/></label>}
+      <label>Email<input name="email" type="email" required maxLength="254" autoComplete="email"/></label>
+      {register && <label>Mobile number<input name="phone" type="tel" required maxLength="20" autoComplete="tel"/></label>}
+      <label>Password<input name="password" type="password" required minLength={register ? 4 : 1} maxLength="128" autoComplete={register ? 'new-password' : 'current-password'}/></label>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button className="btn wide" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
+    </form>
+    <p className="account-switch">{register ? 'Already registered?' : 'New to OM Stationary?'} <Link to={register ? '/login' : '/register'}>{register ? 'Sign in' : 'Create an account'}</Link></p>
+  </div></section>;
 }
+
 export function AccountPage({ user, onLogout }) {
   const [profile, setProfile] = useState(null), [addresses, setAddresses] = useState([]), [message, setMessage] = useState(''), [error, setError] = useState('');
   const reload = async () => {

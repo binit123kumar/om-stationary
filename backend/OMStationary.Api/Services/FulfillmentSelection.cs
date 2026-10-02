@@ -98,3 +98,4 @@ public sealed class FulfillmentSelectionService(IEnumerable<IFulfillmentProvider
         return null;
     }
 }
+

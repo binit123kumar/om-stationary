@@ -59,3 +59,4 @@ public class DeliveryController(OmDbContext db, IConfiguration configuration, Fu
         return Ok(new { available = false, reason = "OM Stationary does not have all requested items and quantities in stock right now." });
     }
 }
+

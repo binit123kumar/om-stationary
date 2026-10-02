@@ -24,3 +24,4 @@ public sealed class SettlementService(OmDbContext db, IConfiguration configurati
         await db.SaveChangesAsync(cancellationToken);
     }
 }
+

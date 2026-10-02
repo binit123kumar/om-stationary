@@ -142,3 +142,4 @@ internal static class PaytmChecksum
         if (Encoding.UTF8.GetByteCount(key) != 16) throw new InvalidOperationException("Paytm MerchantKey must be exactly 16 UTF-8 bytes.");
     }
 }
+

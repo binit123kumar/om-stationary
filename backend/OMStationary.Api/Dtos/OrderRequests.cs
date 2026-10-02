@@ -64,7 +64,7 @@ public class DeliveryPartnerRequest
     [Required, EmailAddress, StringLength(254)] public string Email { get; set; } = "";
     [StringLength(50)] public string VehicleType { get; set; } = "";
     [StringLength(30)] public string VehicleNumber { get; set; } = "";
-    [Required, MinLength(10), StringLength(128)] public string Password { get; set; } = "";
+    [Required, MinLength(4), StringLength(128)] public string Password { get; set; } = "";
 }
 
 public class DeliveryPartnerStatusRequest
@@ -84,10 +84,11 @@ public class CreatePartnerAccountRequest
 {
     [Required, EmailAddress, StringLength(254)] public string Email { get; set; } = "";
     [Required, Phone, StringLength(20)] public string Phone { get; set; } = "";
-    [Required, MinLength(10), StringLength(128)] public string Password { get; set; } = "";
+    [Required, MinLength(4), StringLength(128)] public string Password { get; set; } = "";
 }
 
 public class ShopApprovalRequest
 {
     public bool IsApproved { get; set; }
 }
+

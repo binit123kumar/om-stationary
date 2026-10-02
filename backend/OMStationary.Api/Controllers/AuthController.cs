@@ -97,3 +97,4 @@ public sealed class AuthController(OmDbContext db, TokenService tokens) : Contro
         });
     }
 }
+

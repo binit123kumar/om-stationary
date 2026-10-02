@@ -106,3 +106,4 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
         return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(order.TrackingTokenHash), Encoding.UTF8.GetBytes(hash));
     }
 }
+

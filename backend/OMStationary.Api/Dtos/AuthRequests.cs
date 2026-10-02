@@ -7,7 +7,7 @@ public sealed class RegisterRequest
     [Required, EmailAddress, StringLength(254)] public string Email { get; set; } = "";
     [Required, Phone, StringLength(20)] public string Phone { get; set; } = "";
     [Required, StringLength(120)] public string FullName { get; set; } = "";
-    [Required, MinLength(10), StringLength(128)] public string Password { get; set; } = "";
+    [Required, MinLength(4), StringLength(128)] public string Password { get; set; } = "";
 }
 
 public sealed class LoginRequest
@@ -71,3 +71,4 @@ public sealed class CouponCreateRequest
     public DateTime ExpiresAt { get; set; }
     public bool IsActive { get; set; } = true;
 }
+

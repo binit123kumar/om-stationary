@@ -818,3 +818,4 @@ SELECT d.[Id], d.[Status], NULL, SYSUTCDATETIME() FROM [Deliveries] d;
             throw new NotSupportedException("Down migrations are disabled to prevent accidental business-data loss.");
         }    }
 }
+

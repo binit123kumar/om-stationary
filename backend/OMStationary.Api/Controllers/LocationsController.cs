@@ -36,3 +36,4 @@ public class LocationsController(IConfiguration configuration) : ControllerBase
         });
     }
 }
+

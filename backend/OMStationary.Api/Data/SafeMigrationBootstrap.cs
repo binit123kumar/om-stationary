@@ -115,3 +115,4 @@ COL_LENGTH(N'dbo.PlatformConnectors', N'OrderApiAvailable') IS NOT NULL AND COL_
 COL_LENGTH(N'dbo.PlatformConnectors', N'Status') IS NOT NULL
 THEN 1 ELSE 0 END";
 }
+

@@ -45,3 +45,4 @@ public sealed class UnconfiguredPaymentGateway(IConfiguration configuration) : I
         Task.FromResult(new GatewayPaymentStatus(false, false, "NotConfigured", null, null, "Online payment is not configured."));
     public bool VerifyCallback(string payload, string signature) => false;
 }
+

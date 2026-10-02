@@ -357,3 +357,4 @@ public class WishlistItem
     public Product? Product { get; set; }
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 }
+

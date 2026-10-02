@@ -8,3 +8,4 @@ public static class TaxCalculator
         return Math.Round(Math.Max(0m, taxableAmount) * ratePercent / 100m, 2, MidpointRounding.AwayFromZero);
     }
 }
+

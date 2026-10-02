@@ -168,3 +168,4 @@ namespace OMStationary.Api.Migrations
             throw new NotSupportedException("Down migrations are disabled to prevent accidental business-data loss.");
         }    }
 }
+

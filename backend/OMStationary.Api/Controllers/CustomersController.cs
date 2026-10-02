@@ -111,3 +111,4 @@ public sealed class CustomersController(OmDbContext db) : ControllerBase
         target.Latitude = request.Latitude; target.Longitude = request.Longitude; target.IsDefault = request.IsDefault;
     }
 }
+

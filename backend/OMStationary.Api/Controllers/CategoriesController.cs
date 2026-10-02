@@ -11,3 +11,4 @@ public sealed class CategoriesController(OmDbContext db) : ControllerBase
     public async Task<IActionResult> Get() => Ok(await db.Products.AsNoTracking().Where(x => x.IsActive)
         .Select(x => x.Category).Distinct().OrderBy(x => x).ToListAsync());
 }
+

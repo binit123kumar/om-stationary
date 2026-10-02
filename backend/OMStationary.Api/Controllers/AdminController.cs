@@ -228,3 +228,4 @@ public sealed class AdminController(OmDbContext db) : ControllerBase
         if (string.IsNullOrWhiteSpace(product.ImageUrl)) product.ImageUrl = cleaned[0];
     }
 }
+

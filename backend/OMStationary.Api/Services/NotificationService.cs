@@ -63,3 +63,4 @@ public sealed class NotificationService(OmDbContext db)
     public static string? MessageFor(string eventName) =>
         OrderStatusMessages.TryGetValue(eventName, out var known) ? known : null;
 }
+

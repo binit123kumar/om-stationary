@@ -33,3 +33,4 @@ public static class OrderStateMachine
             ? allowed.Where(x => !x.Equals("Cancelled", StringComparison.OrdinalIgnoreCase)).ToArray()
             : [];
 }
+

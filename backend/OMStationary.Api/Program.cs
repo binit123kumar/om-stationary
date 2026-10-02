@@ -45,8 +45,15 @@ builder.Services.AddScoped<IPaymentGateway>(sp =>
 builder.Services.AddAuthentication("Bearer").AddScheme<AuthenticationSchemeOptions, JwtAuthenticationHandler>("Bearer", _ => { });
 builder.Services.AddAuthorization();
 
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ??
-    ["http://localhost:5173", "http://127.0.0.1:5173"];
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+if (builder.Environment.IsDevelopment() && allowedOrigins.Length == 0)
+    allowedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
+if (!builder.Environment.IsDevelopment() &&
+    (allowedOrigins.Length == 0 || allowedOrigins.Any(origin =>
+        !Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
+        uri.Scheme != Uri.UriSchemeHttps ||
+        uri.IsLoopback)))
+    throw new InvalidOperationException("Configure Cors__AllowedOrigins with the exact HTTPS storefront origin(s) before starting outside Development.");
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddRateLimiter(options =>
@@ -215,3 +222,4 @@ app.MapGet("/api/health", async (OmDbContext db) =>
 });
 app.MapControllers();
 app.Run();
+

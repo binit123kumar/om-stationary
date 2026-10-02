@@ -443,3 +443,4 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         return Ok(new { order.OrderNumber, order.Status, AssignedPartner = selectedPartner?.Name ?? delivery.PartnerName, delivery.TrackingCode, DeliveryStatus = delivery.Status });
     }
 }
+

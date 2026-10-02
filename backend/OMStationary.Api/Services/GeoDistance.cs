@@ -13,3 +13,4 @@ public static class GeoDistance
         return earthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 }
+
