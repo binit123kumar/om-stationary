@@ -34,6 +34,21 @@ builder.Services.AddScoped<InvoiceService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton<ICodPaymentProvider, CodPaymentProvider>();
 builder.Services.AddHttpClient<PaytmQrPaymentGateway>(client => client.Timeout = TimeSpan.FromSeconds(20));
+
+// Store configuration: database override layered on top of appsettings/environment configuration.
+builder.Services.AddScoped<StoreSettingsService>();
+
+// WhatsApp Business Cloud API. The options object carries the access token and is never exposed
+// through an API response; the named HttpClient is pooled so a notification burst does not open a
+// socket per message.
+builder.Services.Configure<WhatsAppOptions>(builder.Configuration.GetSection(WhatsAppOptions.SectionName));
+builder.Services.AddHttpClient(WhatsAppHttpClient.Name, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("OMStationary-Api/1.0");
+});
+builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
+builder.Services.AddScoped<StockAlertService>();
 builder.Services.AddScoped<IPaymentGateway>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -172,14 +187,36 @@ try
     await db.SaveChangesAsync();
     var adminEmail = builder.Configuration["Admin:BootstrapEmail"]?.Trim().ToLowerInvariant();
     var adminPassword = builder.Configuration["Admin:BootstrapPassword"];
-    if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword) &&
-        !await db.Users.AnyAsync(x => x.Email == adminEmail))
+    // Opt-in password sync for the bootstrap account. Off unless explicitly enabled, because
+    // silently resetting an existing admin's password would be a security downgrade.
+    var adminOverwritePassword = builder.Configuration.GetValue<bool>("Admin:BootstrapOverwritePassword");
+    if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
     {
-        var adminRoleId = await db.Roles.Where(x => x.Name == "Admin").Select(x => x.Id).FirstAsync();
-        var admin = new ApplicationUser { Email = adminEmail, Phone = builder.Configuration["Admin:BootstrapPhone"] ?? "", Role = "Admin", RoleId = adminRoleId };
-        admin.PasswordHash = new PasswordHasher<ApplicationUser>().HashPassword(admin, adminPassword);
-        db.Users.Add(admin);
-        await db.SaveChangesAsync();
+        var existingAdmin = await db.Users.FirstOrDefaultAsync(x => x.Email == adminEmail);
+        if (existingAdmin is null)
+        {
+            var adminRoleId = await db.Roles.Where(x => x.Name == "Admin").Select(x => x.Id).FirstAsync();
+            var admin = new ApplicationUser { Email = adminEmail, Phone = builder.Configuration["Admin:BootstrapPhone"] ?? "", Role = "Admin", RoleId = adminRoleId };
+            admin.PasswordHash = new PasswordHasher<ApplicationUser>().HashPassword(admin, adminPassword);
+            db.Users.Add(admin);
+            await db.SaveChangesAsync();
+            app.Logger.LogInformation("Bootstrap admin account {Email} created.", adminEmail);
+        }
+        else if (adminOverwritePassword)
+        {
+            var hasher = new PasswordHasher<ApplicationUser>();
+            if (hasher.VerifyHashedPassword(existingAdmin, existingAdmin.PasswordHash, adminPassword) == PasswordVerificationResult.Failed)
+            {
+                existingAdmin.PasswordHash = hasher.HashPassword(existingAdmin, adminPassword);
+                existingAdmin.IsActive = true;
+                var bootstrapPhone = builder.Configuration["Admin:BootstrapPhone"];
+                if (!string.IsNullOrWhiteSpace(bootstrapPhone) &&
+                    !await db.Users.AnyAsync(x => x.Phone == bootstrapPhone && x.Id != existingAdmin.Id))
+                    existingAdmin.Phone = bootstrapPhone;
+                await db.SaveChangesAsync();
+                app.Logger.LogWarning("Bootstrap admin account {Email} password synchronised with configuration.", adminEmail);
+            }
+        }
     }
 }
 catch (Exception error)

@@ -56,13 +56,32 @@ public sealed class InvoiceService(OmDbContext db, IConfiguration configuration)
     {
         invoice.PdfGenerationCount++;
         await db.SaveChangesAsync(cancellationToken);
+        static string Configured(string? value)
+        {
+            var clean = value?.Trim() ?? "";
+            return clean.Length == 0 || clean.StartsWith("[PUT ", StringComparison.OrdinalIgnoreCase) ? "" : clean;
+        }
+        // A blank configured value prints as "Not configured" instead of being replaced by a number
+        // we would have had to invent.
+        var udyam = Configured(configuration["Billing:UdyamRegistration"]);
+        var gstin = Configured(configuration["Billing:TaxRegistration"]);
+        var payment = await db.Payments.AsNoTracking()
+            .Where(x => x.OrderId == invoice.OrderId)
+            .OrderByDescending(x => x.Id)
+            .Select(x => new { x.Provider, x.Status, x.ProviderReference })
+            .FirstOrDefaultAsync(cancellationToken);
         return InvoicePdf.Render(invoice,
-            configuration["Billing:BusinessName"] ?? "OM Stationary",
-            configuration["Billing:BusinessAddress"] ?? "",
-            configuration["Billing:PlusCode"] ?? "",
-            configuration["Billing:Phone"] ?? "",
-            configuration["Billing:Email"] ?? "",
-            configuration["Billing:TaxRegistration"] ?? "");
+            Configured(configuration["Billing:BusinessName"]) is { Length: > 0 } name ? name : "OM Stationary",
+            Configured(configuration["Billing:BusinessAddress"]) is { Length: > 0 } address
+                ? address : Configured(configuration["OmStationary:Address"]),
+            Configured(configuration["Billing:PlusCode"]),
+            Configured(configuration["Billing:Phone"]),
+            Configured(configuration["Billing:Email"]),
+            gstin.Length > 0 ? "GSTIN: " + gstin : "",
+            udyam.Length > 0 ? "Udyam Registration: " + udyam : "Udyam Registration: Not configured",
+            configuration.GetValue<decimal>("Tax:RatePercent"),
+            payment?.Provider ?? "",
+            payment?.ProviderReference ?? "");
     }
 }
 
@@ -74,7 +93,8 @@ internal static class InvoicePdf
         public float Y { get; set; } = 790;
     }
 
-    public static byte[] Render(Invoice invoice, string business, string address, string plusCode, string phone, string email, string taxRegistration)
+    public static byte[] Render(Invoice invoice, string business, string address, string plusCode, string phone, string email,
+        string gstinLine, string udyamLine, decimal taxRatePercent, string paymentProvider, string transactionId)
     {
         var pages = new List<Page> { new() };
         var page = pages[0];
@@ -82,9 +102,11 @@ internal static class InvoicePdf
         Text(page, 48, page.Y - 23, 10, "Stationery and office essentials", "0.35 0.40 0.48 rg");
         Text(page, 48, page.Y - 43, 9, address, "0.20 0.25 0.32 rg");
         Text(page, 48, page.Y - 57, 9, string.Join("  |  ", new[] { plusCode, phone, email }.Where(x => !string.IsNullOrWhiteSpace(x))), "0.35 0.40 0.48 rg");
-        if (!string.IsNullOrWhiteSpace(taxRegistration)) Text(page, 48, page.Y - 71, 9, "GSTIN: " + taxRegistration, "0.35 0.40 0.48 rg");
-        Line(page, 48, page.Y - 84, 547);
-        page.Y -= 112;
+        if (!string.IsNullOrWhiteSpace(gstinLine)) Text(page, 48, page.Y - 71, 9, gstinLine, "0.35 0.40 0.48 rg");
+        Text(page, 48, page.Y - (string.IsNullOrWhiteSpace(gstinLine) ? 71 : 85), 9, udyamLine, "0.35 0.40 0.48 rg");
+        var headerRule = page.Y - (string.IsNullOrWhiteSpace(gstinLine) ? 96 : 110);
+        Line(page, 48, headerRule, 547);
+        page.Y = headerRule - 28;
         Text(page, 48, page.Y, 19, "TAX INVOICE", "0.08 0.22 0.40 rg");
         Text(page, 355, page.Y + 2, 10, "Invoice No: " + invoice.InvoiceNumber);
         Text(page, 355, page.Y - 13, 9, "Order ID: " + invoice.OrderNumber);
@@ -106,26 +128,37 @@ internal static class InvoicePdf
         Line(page, 48, page.Y, 547);
         page.Y -= 17;
         Text(page, 48, page.Y, 9, "ITEM", "0.08 0.22 0.40 rg");
-        Text(page, 302, page.Y, 9, "SKU", "0.08 0.22 0.40 rg");
-        Text(page, 394, page.Y, 9, "QTY", "0.08 0.22 0.40 rg");
-        Text(page, 435, page.Y, 9, "UNIT PRICE", "0.08 0.22 0.40 rg");
-        Text(page, 510, page.Y, 9, "AMOUNT", "0.08 0.22 0.40 rg");
+        Text(page, 262, page.Y, 9, "HSN/SKU", "0.08 0.22 0.40 rg");
+        Text(page, 350, page.Y, 9, "QTY", "0.08 0.22 0.40 rg");
+        Text(page, 372, page.Y, 9, "RATE", "0.08 0.22 0.40 rg");
+        Text(page, 424, page.Y, 9, "TAXABLE", "0.08 0.22 0.40 rg");
+        Text(page, 486, page.Y, 9, "GST", "0.08 0.22 0.40 rg");
+        Text(page, 528, page.Y, 9, "AMOUNT", "0.08 0.22 0.40 rg");
         page.Y -= 10;
         Line(page, 48, page.Y, 547);
         page.Y -= 18;
+        var lineSubtotal = invoice.Items.Sum(i => i.UnitPrice * i.Quantity);
+        var lineDiscounts = invoice.Items.Sum(i => i.Discount);
         foreach (var item in invoice.Items)
         {
-            if (page.Y < 115)
+            if (page.Y < 150)
             {
                 page = new Page(); pages.Add(page);
                 Text(page, 48, page.Y, 9, "OM Stationary | Invoice " + invoice.InvoiceNumber, "0.35 0.40 0.48 rg");
                 page.Y -= 24;
             }
+            var gross = item.UnitPrice * item.Quantity;
+            var discount = item.Discount + (lineSubtotal > 0m
+                ? Math.Round(item.Discount + (invoice.Discount - lineDiscounts) * (gross / lineSubtotal), 2) : 0m);
+            var taxable = gross - discount;
+            var tax = TaxCalculator.Calculate(taxable, taxRatePercent);
             Text(page, 48, page.Y, 9, item.ProductName);
-            Text(page, 302, page.Y, 8, string.IsNullOrWhiteSpace(item.Sku) ? "-" : item.Sku);
-            Text(page, 400, page.Y, 9, item.Quantity.ToString(CultureInfo.InvariantCulture));
-            Text(page, 435, page.Y, 9, Money(item.UnitPrice));
-            Text(page, 510, page.Y, 9, Money(item.UnitPrice * item.Quantity));
+            Text(page, 262, page.Y, 8, string.IsNullOrWhiteSpace(item.Sku) ? "-" : item.Sku);
+            Text(page, 356, page.Y, 9, item.Quantity.ToString(CultureInfo.InvariantCulture));
+            Text(page, 372, page.Y, 9, Money(item.UnitPrice));
+            Text(page, 424, page.Y, 9, Money(taxable));
+            Text(page, 494, page.Y, 9, Money(tax));
+            Text(page, 528, page.Y, 9, Money(taxable + tax));
             page.Y -= 16;
         }
 
@@ -134,15 +167,18 @@ internal static class InvoicePdf
         page.Y -= 17;
         Total(page, "Subtotal", invoice.Subtotal);
         Total(page, "Discount", -invoice.Discount);
+        Total(page, "Taxable value", invoice.Subtotal - invoice.Discount);
+        Total(page, $"GST {taxRatePercent.ToString("0.##", CultureInfo.InvariantCulture)}%", invoice.TaxAmount);
         Total(page, "Delivery charge", invoice.DeliveryCharge);
-        Total(page, "Tax", invoice.TaxAmount);
         page.Y -= 3;
         Line(page, 342, page.Y, 547);
         page.Y -= 19;
         Text(page, 342, page.Y, 12, "GRAND TOTAL", "0.08 0.22 0.40 rg");
         Text(page, 485, page.Y, 12, Money(invoice.GrandTotal), "0.08 0.22 0.40 rg");
-        page.Y -= 23;
-        Text(page, 48, page.Y, 9, "Payment: " + invoice.PaymentMethod + "  |  Status: " + invoice.PaymentStatus);
+        page.Y -= 22;
+        Text(page, 48, page.Y, 9, "Payment: " + invoice.PaymentMethod + "  |  Status: " + invoice.PaymentStatus +
+            (string.IsNullOrWhiteSpace(paymentProvider) ? "" : "  |  Provider: " + paymentProvider) +
+            (string.IsNullOrWhiteSpace(transactionId) ? "" : "  |  Transaction: " + transactionId));
         page.Y -= 22;
         Text(page, 48, page.Y, 9, "Thank you for shopping with OM Stationary.", "0.35 0.40 0.48 rg");
         Text(page, 48, 24, 8, "Computer-generated invoice. Keep this bill for your records.", "0.45 0.48 0.52 rg");

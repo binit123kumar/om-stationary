@@ -13,7 +13,7 @@ namespace OMStationary.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(OmDbContext db, TokenService tokens) : ControllerBase
+public sealed class AuthController(OmDbContext db, TokenService tokens, IWhatsAppNotificationService whatsapp) : ControllerBase
 {
     private readonly PasswordHasher<ApplicationUser> _passwords = new();
 
@@ -30,16 +30,29 @@ public sealed class AuthController(OmDbContext db, TokenService tokens) : Contro
         user.PasswordHash = _passwords.HashPassword(user, request.Password);
         db.Users.Add(user);
         db.CustomerProfiles.Add(new CustomerProfile { UserId = user.Id, FullName = request.FullName.Trim() });
+        await db.SaveChangesAsync();
+        // Admin heads-up about a new customer. Only the name and contact details the customer just
+        // supplied are sent, and the alert is best-effort: registration must succeed regardless.
+        try { await whatsapp.NotifyNewCustomerAsync(request.FullName.Trim(), user.Email, user.Phone); } catch (Exception) { /* logged as a failed attempt */ }
         return await CreateSession(user);
     }
 
     [HttpPost("login"), EnableRateLimiting("order-writes")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == email && x.IsActive);
+        // The storefront labels this field "Email or mobile", so both are accepted. The lookup is a
+        // single OR query on a normalised value and the password is still verified with the stored
+        // hash, so nothing about the existing authentication policy is relaxed.
+        var identifier = request.Email.Trim().ToLowerInvariant();
+        var phone = request.Email.Trim();
+        var looksLikeEmail = identifier.Contains('@') && identifier.Contains('.');
+        var looksLikePhone = System.Text.RegularExpressions.Regex.IsMatch(phone, @"^[6-9]\d{9}$");
+        if (!looksLikeEmail && !looksLikePhone)
+            return BadRequest(new { detail = "Enter a valid email address or 10 digit mobile number." });
+        var user = await db.Users.FirstOrDefaultAsync(x => x.IsActive &&
+            (x.Email == identifier || x.Phone == phone));
         if (user is null || _passwords.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
-            return Unauthorized(new { detail = "Email or password is incorrect." });
+            return Unauthorized(new { detail = "Email or mobile number, and password are incorrect." });
         return await CreateSession(user);
     }
 

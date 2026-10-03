@@ -17,11 +17,17 @@ public sealed class NotificationsController(OmDbContext db) : ControllerBase
         var id = CurrentUserId;
         if (id is null) return Unauthorized();
         take = Math.Clamp(take, 1, 100);
+        // The customer's order *number* is included (not just the internal OrderId) so the
+        // storefront can link straight to /track/{orderNumber} without a second lookup.
         var rows = await db.Notifications.AsNoTracking()
             .Where(x => x.UserId == id && x.Channel == NotificationServiceNames.InApp)
             .OrderByDescending(x => x.CreatedAt)
             .Take(take)
-            .Select(x => new { x.Id, x.OrderId, x.Event, x.Title, x.Message, x.IsRead, x.CreatedAt })
+            .Select(x => new
+            {
+                x.Id, x.OrderId, x.Event, x.Title, x.Message, x.IsRead, x.CreatedAt,
+                OrderNumber = x.OrderId == null ? null : db.Orders.Where(o => o.Id == x.OrderId).Select(o => o.OrderNumber).FirstOrDefault()
+            })
             .ToListAsync();
         var unread = await db.Notifications.CountAsync(x => x.UserId == id && x.Channel == NotificationServiceNames.InApp && !x.IsRead);
         return Ok(new { unread, items = rows });

@@ -15,7 +15,7 @@ namespace OMStationary.Api.Controllers;
 [Route("api/orders")]
 public class OrdersController(OmDbContext db, IConfiguration configuration, FulfillmentSelectionService fulfillment,
     ICodPaymentProvider codPayments, CouponService coupons, IPaymentGateway gateway, InvoiceService invoices,
-    NotificationService notifications) : ControllerBase
+    NotificationService notifications, IWhatsAppNotificationService whatsapp, StockAlertService stockAlerts) : ControllerBase
 {
     private bool IsAdmin()
     {
@@ -78,10 +78,12 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         {
             order.OrderNumber, order.Status, order.PaymentMethod, order.PaymentStatus,
             order.RequestedDeliveryDate,
+            // Reachable only by the owner, an admin, or a holder of the tracking token.
+            order.CustomerName, order.CustomerPhone, order.CustomerEmail,
             order.Subtotal, order.DeliveryCharge, order.DiscountAmount, order.TaxAmount, order.CouponCode, order.TotalAmount, order.CreatedAt,
             fulfillmentMethod = order.SourceType == "OMStationaryPickup" ? "Pickup" : "Delivery",
-            Items = order.Items.Select(i => new { i.ProductName, i.Quantity, i.UnitPrice }),
-            History = order.StatusHistory.OrderBy(h => h.CreatedAt).Select(h => new { h.Status, h.CreatedAt })
+            Items = order.Items.Select(i => new { i.ProductName, i.Sku, i.Quantity, i.UnitPrice, i.ProductId }),
+            History = order.StatusHistory.OrderBy(h => h.CreatedAt).Select(h => new { h.Status, h.Note, h.CreatedAt })
         });
     }
 
@@ -104,29 +106,161 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         var invoice = await db.Invoices.AsNoTracking().Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.OrderId == order.Id);
         if (invoice is null) return NotFound("An invoice has not been generated for this order yet.");
-        var businessName = configuration["Billing:BusinessName"] ?? "OM Stationary";
-        var businessAddress = configuration["Billing:BusinessAddress"] ?? configuration["OmStationary:Address"] ?? "";
-        var taxNumber = configuration["Billing:TaxRegistration"] ?? "";
+
+        // Every seller identifier comes from configuration. Nothing is invented here, so an
+        // unconfigured Udyam/GSTIN number is reported as "not configured" rather than faked.
+        static string Configured(string? value)
+        {
+            var clean = value?.Trim() ?? "";
+            return clean.Length == 0 || clean.StartsWith("[PUT ", StringComparison.OrdinalIgnoreCase) ? "" : clean;
+        }
+        var businessName = Configured(configuration["Billing:BusinessName"]);
+        if (businessName.Length == 0) businessName = "OM Stationary";
+        var businessAddress = Configured(configuration["Billing:BusinessAddress"]);
+        if (businessAddress.Length == 0) businessAddress = Configured(configuration["OmStationary:Address"]);
+        var taxNumber = Configured(configuration["Billing:TaxRegistration"]);
+        var udyamNumber = Configured(configuration["Billing:UdyamRegistration"]);
+        var phone = Configured(configuration["Billing:Phone"]);
+        var sellerEmail = Configured(configuration["Billing:Email"]);
+        var plusCode = Configured(configuration["Billing:PlusCode"]);
+
+        // GST is configurable, so the rate is sent with the invoice rather than assumed by the UI.
+        var taxRate = configuration.GetValue<decimal>("Tax:RatePercent");
+        var payment = await db.Payments.AsNoTracking()
+            .Where(x => x.OrderId == order.Id)
+            .OrderByDescending(x => x.Id)
+            .Select(x => new { x.Provider, x.Status, x.ProviderReference, x.Amount, x.PaidAt })
+            .FirstOrDefaultAsync();
+
+        var lineSubtotal = invoice.Items.Sum(l => l.UnitPrice * l.Quantity);
+        var discountTotal = invoice.Items.Sum(l => l.Discount);
+        var taxableValue = invoice.Subtotal - invoice.Discount;
+        // A single order-level discount/coupon is spread over lines in proportion to their value so
+        // that the printed line amounts always add up to the printed order total.
+        var lines = invoice.Items.Select(l =>
+        {
+            var gross = l.UnitPrice * l.Quantity;
+            var lineDiscount = l.Discount + (lineSubtotal > 0m
+                ? Math.Round((l.Discount + (invoice.Discount - discountTotal) * (gross / lineSubtotal)), 2)
+                : 0m);
+            var lineTaxable = gross - lineDiscount;
+            var lineTax = TaxCalculator.Calculate(lineTaxable, taxRate);
+            return new
+            {
+                l.ProductName,
+                HsnSku = string.IsNullOrWhiteSpace(l.Sku) ? "" : l.Sku,
+                l.Quantity,
+                Rate = l.UnitPrice,
+                Gross = gross,
+                Discount = lineDiscount,
+                TaxableAmount = lineTaxable,
+                TaxAmount = lineTax,
+                Amount = lineTaxable + lineTax
+            };
+        }).ToArray();
+
         return Ok(new
         {
             invoice.InvoiceNumber,
             invoice.InvoiceDate,
-            invoice.PaymentStatus,
+            order.OrderNumber,
+            order.CreatedAt,
+            order.Status,
             invoice.PaymentMethod,
+            invoice.PaymentStatus,
             invoice.FulfillmentMethod,
-            billedTo = new { order.CustomerName, order.CustomerPhone, order.CustomerEmail, order.BillingAddress, order.DeliveryAddress },
-            seller = new { businessName, businessAddress, taxNumber },
-            lines = invoice.Items.Select(l => new { l.ProductName, l.Sku, l.Quantity, l.UnitPrice,
-                lineTotal = l.UnitPrice * l.Quantity }),
+            order.CouponCode,
             invoice.Subtotal,
             invoice.Discount,
-            invoice.DeliveryCharge,
+            TaxableValue = taxableValue,
+            taxRatePercent = taxRate,
             invoice.TaxAmount,
+            invoice.DeliveryCharge,
             invoice.GrandTotal,
-            order.OrderNumber,
-            order.Status
+            lines,
+            // Amounts in words, calculated from the authoritative order total.
+            AmountInWords = NumberToWords(invoice.GrandTotal),
+            seller = new
+            {
+                businessName,
+                businessAddress,
+                plusCode,
+                phone,
+                email = sellerEmail,
+                taxNumber,
+                udyamNumber,
+                udyamConfigured = udyamNumber.Length > 0,
+                gstinConfigured = taxNumber.Length > 0
+            },
+            buyer = new
+            {
+                name = order.CustomerName,
+                phone = order.CustomerPhone,
+                email = order.CustomerEmail,
+                billingAddress = string.IsNullOrWhiteSpace(order.BillingAddress) ? order.DeliveryAddress : order.BillingAddress,
+                shippingAddress = order.DeliveryAddress,
+                city = order.City,
+                pincode = order.Pincode
+            },
+            payment = new
+            {
+                method = invoice.PaymentMethod,
+                status = invoice.PaymentStatus,
+                provider = payment?.Provider ?? "",
+                providerStatus = payment?.Status ?? "",
+                // Only ever a reference the gateway actually returned. Never synthesised.
+                transactionId = payment?.ProviderReference ?? "",
+                paidAt = payment?.PaidAt,
+                isCod = invoice.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase)
+            }
         });
     }
+
+    private static readonly string[] AmountWords =
+    {
+        "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+        "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
+    };
+    private static readonly string[] TensWords =
+    {
+        "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
+    };
+
+    internal static string NumberToWords(decimal amount)
+    {
+        var rupees = (long)Math.Round(amount, 0, MidpointRounding.AwayFromZero);
+        var paise = (long)Math.Round((amount - rupees) * 100, MidpointRounding.AwayFromZero);
+        if (paise == 100) { rupees++; paise = 0; }
+        return rupees switch
+        {
+            0 => "Zero rupees only",
+            _ => $"{RupeesInWords(rupees)} rupees{(paise > 0 ? $" and {paise} paise" : "")} only"
+        };
+    }
+
+    private static string RupeesInWords(long value)
+    {
+        if (value < 20) return AmountWords[value];
+        if (value < 100) return $"{TensWords[value / 10]}{(value % 10 > 0 ? " " + AmountWords[value % 10] : "")}";
+        if (value < 1000) return $"{(value / 100 == 1 ? "One Hundred" : AmountWords[value / 100] + " Hundred")}{(value % 100 > 0 ? " " + RupeesInWords(value % 100) : "")}";
+        if (value < 100000) return $"{Thousand(value / 1000)}{(value % 1000 > 0 ? " " + RupeesInWords(value % 1000) : "")}";
+        if (value < 10000000) return $"{Lakh(value / 100000)}{(value % 100000 > 0 ? " " + IndianGroup(value % 100000) : "")}";
+        return $"{Crore(value / 10000000)}{(value % 10000000 > 0 ? " " + IndianGroup(value % 10000000) : "")}";
+    }
+
+    private static string IndianGroup(long value) =>
+        value >= 100000 ? $"{Lakh(value / 100000)}{(value % 100000 > 0 ? " " + IndianGroup(value % 100000) : "")}"
+        : value >= 1000 ? $"{Thousand(value / 1000)}{(value % 1000 > 0 ? " " + IndianGroup(value % 1000) : "")}"
+        : RupeesInWords(value);
+
+    private static string Thousand(long value) =>
+        value == 1 ? "One Thousand" : $"{AmountWords[(int)value]} Thousand";
+
+    private static string Lakh(long value) =>
+        value == 1 ? "One Lakh" : $"{AmountWords[(int)value]} Lakh";
+
+    private static string Crore(long value) =>
+        value == 1 ? "One Crore" : $"{AmountWords[(int)value]} Crore";
 
     [HttpPost, EnableRateLimiting("order-writes")]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken cancellationToken)
@@ -265,6 +399,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         await invoices.CreateOnceAsync(order, cancellationToken);
         // Decrement the inventory the order is actually fulfilled from: OM Stationary's own product
         // stock (pickup orders and first-party delivery), or the supplying partner shop's stock.
+        var affectedProductIds = new List<int>();
         foreach (var item in request.Items)
         {
             if (fulfillmentShop is not null)
@@ -279,6 +414,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
                 var changed = await db.Products.Where(x => x.Id == item.ProductId && x.IsActive && x.Stock >= item.Quantity)
                     .ExecuteUpdateAsync(update => update.SetProperty(x => x.Stock, x => x.Stock - item.Quantity), cancellationToken);
                 if (changed != 1) return Conflict(new { detail = "Stock changed during checkout. Please refresh your cart and try again." });
+                affectedProductIds.Add(item.ProductId);
             }
         }
         if (candidate is not null)
@@ -326,6 +462,26 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
                 paymentIntent = new(false, "Paytm", null, null, "ProviderError", "Paytm returned an unreadable response. You can retry from the order page.");
             }
         }
+
+        // ---- WhatsApp admin alerts -------------------------------------------------------
+        // Deliberately after CommitAsync: the order is already durable, so nothing here can fail
+        // or roll back the customer's purchase. The service records every attempt and never throws.
+        try
+        {
+            await whatsapp.NotifyOrderCreatedAsync(order);
+        }
+        catch (Exception)
+        {
+            // Logged as a failed notification attempt inside the service; nothing else to do.
+        }
+        foreach (var productId in affectedProductIds.Distinct())
+        {
+            // Re-read after the decrement: the stock was changed with ExecuteUpdate, so the
+            // in-memory product still holds its pre-order value.
+            var updated = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == productId, cancellationToken);
+            if (updated is not null) await stockAlerts.NotifyLowStockIfNeededAsync(updated, $"sold on order {order.OrderNumber}", cancellationToken);
+        }
+
         return CreatedAtAction(nameof(Get), new { orderNumber = order.OrderNumber }, new
         {
             order.OrderNumber, order.Status, order.Subtotal, order.DeliveryCharge, order.DiscountAmount, order.TaxAmount, order.CouponCode, order.TotalAmount,
@@ -380,11 +536,13 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             if (canonicalStatus == "Delivered") delivery.CompletedAt = DateTime.UtcNow;
         }
         await db.SaveChangesAsync();
+        // Admin status alert, after the change is committed and never able to undo it.
+        try { await whatsapp.NotifyOrderStatusAsync(order); } catch (Exception) { /* logged as a failed attempt */ }
         return Ok(new { order.Id, order.OrderNumber, order.Status, order.PaymentStatus });
     }
 
     [HttpPatch("{id:int}/payment"), EnableRateLimiting("order-writes")]
-    public async Task<IActionResult> PaymentStatus(int id, [FromBody] UpdatePaymentStatusRequest request)
+    public async Task<IActionResult> PaymentStatus(int id, [FromBody] UpdatePaymentStatusRequest request, CancellationToken cancellationToken)
     {
         if (!IsAdmin()) return AdminRequired();
         if (!request.Status.Equals("Paid", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only a manually confirmed COD payment can be marked Paid.");
@@ -405,6 +563,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         await db.Settlements.Where(x => x.OrderId == order.Id && x.Status == "PendingPayment")
             .ExecuteUpdateAsync(x => x.SetProperty(s => s.Status, "Payable"));
         await db.SaveChangesAsync();
+        try { await whatsapp.NotifyPaymentReceivedAsync(order, payment?.ProviderReference, cancellationToken); } catch (Exception) { /* logged as a failed attempt */ }
         return Ok(new { order.Id, order.OrderNumber, order.PaymentStatus });
     }
 

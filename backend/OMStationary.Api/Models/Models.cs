@@ -326,6 +326,95 @@ public class AuditLog
     public string EntityType { get; set; } = "";
     public string EntityId { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    // Before/after snapshots for admin changes. Credentials are never written here: the audit
+    // writer drops any payload whose key looks like a secret.
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
+/// <summary>
+/// Single-row, admin-editable store configuration. Every nullable column is an OVERRIDE of the
+/// matching appsettings value; null means "use the deployed configuration". Payment credentials are
+/// deliberately absent - only the provider name and enabled flag live here, while the merchant
+/// key/secret stay server-side in configuration.
+/// </summary>
+/// <summary>
+/// Durable log of every WhatsApp Business Cloud API attempt.
+///
+/// A row is written BEFORE the outbound call and updated with the provider response afterwards, so
+/// a failed send is always visible to an admin and can be retried. A row is only marked Sent when
+/// the provider itself returned success; nothing is optimistically marked as delivered.
+/// </summary>
+public class WhatsAppNotification
+{
+    public int Id { get; set; }
+    public int? OrderId { get; set; }
+    public Order? Order { get; set; }
+    public string NotificationType { get; set; } = "";
+    public string Recipient { get; set; } = "";
+    public string Message { get; set; } = "";
+    public string? ProviderMessageId { get; set; }
+    public string Status { get; set; } = WhatsAppNotificationStatuses.Pending;
+    public string? ErrorMessage { get; set; }
+    public int Attempts { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? SentAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+}
+
+public static class WhatsAppNotificationTypes
+{
+    public const string NewOrder = "NewOrder";
+    public const string OrderStatus = "OrderStatus";
+    public const string PaymentUpdate = "PaymentUpdate";
+    public const string LowStock = "LowStock";
+    public const string NewCustomer = "NewCustomer";
+    public const string Test = "Test";
+}
+
+public static class WhatsAppNotificationStatuses
+{
+    /// <summary>Row exists, the outbound call has not been attempted yet.</summary>
+    public const string Pending = "Pending";
+    /// <summary>The provider accepted the message (HTTP 2xx with a message id).</summary>
+    public const string Sent = "Sent";
+    /// <summary>The provider confirmed delivery. Only a real provider status reaches this.</summary>
+    public const string Delivered = "Delivered";
+    /// <summary>The provider rejected the call, or the service is not configured.</summary>
+    public const string Failed = "Failed";
+    /// <summary>No credentials are configured, so no call was attempted at all.</summary>
+    public const string NotConfigured = "NotConfigured";
+}
+
+public class StoreSetting
+{
+    public int Id { get; set; }
+
+    public string? StoreName { get; set; }
+    public string? StoreAddress { get; set; }
+    public string? StorePhone { get; set; }
+    public string? StoreEmail { get; set; }
+    public string? StoreHours { get; set; }
+
+    public decimal? TaxRatePercent { get; set; }
+    public string? TaxRegistration { get; set; }
+    public string? UdyamRegistration { get; set; }
+    public string? InvoicePrefix { get; set; }
+
+    public string? PickupAddress { get; set; }
+    public string? PickupHours { get; set; }
+    public bool? PickupAvailable { get; set; }
+
+    public bool? DeliveryEnabled { get; set; }
+    public string? DeliveryCities { get; set; }
+    public decimal? DeliveryCharge { get; set; }
+    public double? DeliveryMaxRadiusKm { get; set; }
+
+    public string? PaymentProvider { get; set; }
+    public bool? PaymentEnabled { get; set; }
+
+    public Guid? UpdatedByUserId { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class Settlement

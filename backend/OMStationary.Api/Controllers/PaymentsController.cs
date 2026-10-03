@@ -15,14 +15,32 @@ namespace OMStationary.Api.Controllers;
 public sealed class PaymentsController(OmDbContext db, IConfiguration configuration, IPaymentGateway gateway,
     NotificationService notifications) : ControllerBase
 {
+    /// <summary>
+    /// Single source of truth for what the storefront may offer at checkout. The UI renders both
+    /// payment choices from this response and never decides on its own that a payment succeeded.
+    /// </summary>
     [HttpGet("options")]
-    public IActionResult Options() => Ok(new
+    public IActionResult Options()
     {
-        cashOnDelivery = true,
-        onlineUpi = gateway.IsConfigured,
-        onlineProvider = gateway.IsConfigured ? gateway.Name : null,
-        taxRatePercent = configuration.GetValue<decimal>("Tax:RatePercent")
-    });
+        static string Configured(string? value)
+        {
+            var clean = value?.Trim() ?? "";
+            return clean.Length == 0 || clean.StartsWith("[PUT ", StringComparison.OrdinalIgnoreCase) ? "" : clean;
+        }
+        var vpa = Configured(configuration["Payments:Upi:Vpa"]);
+        return Ok(new
+        {
+            cashOnDelivery = true,
+            onlineUpi = gateway.IsConfigured,
+            onlineProvider = gateway.IsConfigured ? gateway.Name : null,
+            // A blank VPA must be reported as unconfigured, never replaced with a placeholder the
+            // customer could scan.
+            upiVpa = vpa,
+            upiPayeeName = Configured(configuration["Payments:Upi:PayeeName"]),
+            verificationAvailable = gateway.IsConfigured,
+            taxRatePercent = configuration.GetValue<decimal>("Tax:RatePercent")
+        });
+    }
 
     [HttpPost("orders/{orderNumber}/intent"), EnableRateLimiting("order-writes")]
     public async Task<IActionResult> CreateIntent(string orderNumber, CancellationToken cancellationToken)

@@ -12,7 +12,9 @@ public sealed class RegisterRequest
 
 public sealed class LoginRequest
 {
-    [Required, EmailAddress, StringLength(254)] public string Email { get; set; } = "";
+    // Accepts an email address OR a mobile number, so [EmailAddress] cannot be applied here.
+    // The controller still requires a non-empty, length-bounded value and verifies the password hash.
+    [Required, StringLength(254)] public string Email { get; set; } = "";
     [Required, StringLength(128)] public string Password { get; set; } = "";
 }
 

@@ -32,6 +32,8 @@ public class OmDbContext : DbContext
     public DbSet<Settlement> Settlements => Set<Settlement>();
     public DbSet<Wishlist> Wishlists => Set<Wishlist>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+    public DbSet<StoreSetting> StoreSettings => Set<StoreSetting>();
+    public DbSet<WhatsAppNotification> WhatsAppNotifications => Set<WhatsAppNotification>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ApplicationUser>().HasIndex(x => x.Email).IsUnique();
@@ -170,6 +172,36 @@ public class OmDbContext : DbContext
         modelBuilder.Entity<Notification>().Property(x => x.Status).HasMaxLength(24).IsRequired();
         modelBuilder.Entity<Notification>().Property(x => x.Title).HasMaxLength(160);
         modelBuilder.Entity<Notification>().Property(x => x.Message).HasMaxLength(600);
+
+        // Admin audit before/after snapshots. Capped so a large payload can never bloat the table.
+        modelBuilder.Entity<AuditLog>().Property(x => x.OldValue).HasMaxLength(500);
+        modelBuilder.Entity<AuditLog>().Property(x => x.NewValue).HasMaxLength(500);
+
+        // Single-row store configuration override. Exactly one row (Id = 1) is expected.
+        modelBuilder.Entity<StoreSetting>().Property(x => x.StoreName).HasMaxLength(200);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.StoreAddress).HasMaxLength(600);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.StorePhone).HasMaxLength(40);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.StoreEmail).HasMaxLength(254);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.StoreHours).HasMaxLength(200);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.TaxRegistration).HasMaxLength(80);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.UdyamRegistration).HasMaxLength(80);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.InvoicePrefix).HasMaxLength(24);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.PickupAddress).HasMaxLength(600);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.PickupHours).HasMaxLength(200);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.DeliveryCities).HasMaxLength(1000);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.PaymentProvider).HasMaxLength(40);
+        modelBuilder.Entity<StoreSetting>().HasIndex(x => x.UpdatedAt);
+        modelBuilder.Entity<WhatsAppNotification>().HasIndex(x => x.CreatedAt);
+        modelBuilder.Entity<WhatsAppNotification>().HasIndex(x => x.Status);
+        modelBuilder.Entity<WhatsAppNotification>().HasIndex(x => x.NotificationType);
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.NotificationType).HasMaxLength(40).IsRequired();
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.Recipient).HasMaxLength(24).IsRequired();
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.Status).HasMaxLength(24).IsRequired();
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.ProviderMessageId).HasMaxLength(200);
+        // The message body is bounded so the log cannot grow without limit; long order payloads are
+        // truncated rather than rejected.
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.Message).HasMaxLength(4000);
+        modelBuilder.Entity<WhatsAppNotification>().Property(x => x.ErrorMessage).HasMaxLength(600);
     }
 }
 
