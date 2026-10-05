@@ -6,7 +6,7 @@ using OMStationary.Api.Models;
 
 namespace OMStationary.Api.Services;
 
-public sealed class InvoiceService(OmDbContext db, IConfiguration configuration)
+public sealed class InvoiceService(OmDbContext db, IConfiguration configuration, StoreSettingsService storeSettings)
 {
     public async Task<Invoice> CreateOnceAsync(Order order, CancellationToken cancellationToken = default)
     {
@@ -79,7 +79,7 @@ public sealed class InvoiceService(OmDbContext db, IConfiguration configuration)
             Configured(configuration["Billing:Email"]),
             gstin.Length > 0 ? "GSTIN: " + gstin : "",
             udyam.Length > 0 ? "Udyam Registration: " + udyam : "Udyam Registration: Not configured",
-            configuration.GetValue<decimal>("Tax:RatePercent"),
+            await storeSettings.GetTaxRatePercentAsync(cancellationToken),
             payment?.Provider ?? "",
             payment?.ProviderReference ?? "");
     }

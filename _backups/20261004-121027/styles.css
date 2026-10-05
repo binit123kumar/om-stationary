@@ -34,10 +34,6 @@
 .admin-table td small{display:block;color:#8a93a2;font-size:12px;margin-top:3px}
 .admin-table .low-stock{color:#dc2626;font-weight:800}
 .admin-table button{margin-right:6px;padding:6px 10px;font-size:12px}
-.admin-section-tabs{display:flex;flex-wrap:wrap;gap:7px;max-width:100%}
-.admin-section-tabs button{border:1px solid #dbe2ea;border-radius:999px;background:#fff;color:#344256;padding:8px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
-.admin-section-tabs button.selected{background:#164f87;color:#fff;border-color:#164f87}
-.admin-api-data{max-height:65vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f8fb;border:1px solid #e4e8ee;border-radius:12px;padding:16px;font-size:12px}
 @media(max-width:800px){.contact-layout{grid-template-columns:1fr}.content-prose{padding:22px 18px}.admin-table{display:block;overflow-x:auto}}
 /* =========================================================
    OM STATIONARY � 3D GLASS ACCOUNT EXPERIENCE

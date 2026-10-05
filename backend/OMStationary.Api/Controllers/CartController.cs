@@ -96,9 +96,11 @@ public sealed class CartController(OmDbContext db) : ControllerBase
         if (await db.Products.CountAsync(x => x.IsActive && ids.Contains(x.Id)) != ids.Length)
             return Conflict(new { detail = "One or more cart products are no longer available." });
         var cart = await GetOrCreateCart();
+        await using var transaction = await db.Database.BeginTransactionAsync();
         await db.CartItems.Where(x => x.CartId == cart.Id).ExecuteDeleteAsync();
         db.CartItems.AddRange(request.Items.Select(x => new CartItem { CartId = cart.Id, ProductId = x.ProductId, Quantity = x.Quantity }));
         cart.UpdatedAt = DateTime.UtcNow; await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         return await Get();
     }
 

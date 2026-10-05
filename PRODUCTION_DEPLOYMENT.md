@@ -5,20 +5,21 @@ This project has no hosting platform or production domain configured. This check
 ## What is already in the project
 
 - React/Vite storefront and ASP.NET Core 10 API, backed by EF Core and SQL Server.
-- Three EF migrations: `20260929022303_InitialMvpSchema`, `20260929030714_MvpFoundation`, and `20260930065632_OmStationaryDirectCommerce`.
+- Five EF migrations: `20260929022303_InitialMvpSchema`, `20260929030714_MvpFoundation`, `20260930065632_OmStationaryDirectCommerce`, `20261003093401_AdminStoreSettingsAndAuditValues`, and `20261003110615_WhatsAppNotifications`.
 - JWT access tokens (15 minutes) and hashed, revocable refresh tokens (30 days); password hashes use ASP.NET Identity's `PasswordHasher`.
 - Admin bootstrap creates an account only when both `Admin:BootstrapEmail` and `Admin:BootstrapPassword` are set and that email does not already exist. Password is hashed.
 - Order checkout reads product/partner stock and prices from SQL. Stock decrements use conditional SQL updates inside the order transaction, so competing orders cannot reduce stock below zero.
 - API checks the configured delivery city and PIN, requires customer coordinates, and selects stock from eligible shops within `Delivery:MaxRadiusKm`.
 - COD is implemented. Paytm QR/status integration is present but disabled in the checked-in configuration.
 
-## Build and migration verification (2026-10-03)
+## Build and migration verification (2026-10-04)
 
-- Frontend `npm run build`: **PASS**. Vite emitted dependency warnings about `use client` module directives.
-- Backend `dotnet restore` and `dotnet build --configuration Release`: **PASS**, 0 errors and 4 nullable warnings in `Controllers/WishlistController.cs`. NuGet vulnerability metadata could not be downloaded in this environment (`NU1900`, nuget.org unreachable).
-- `dotnet ef migrations list`: found the three migrations above, but could not connect to the configured SQL Server, so applied/pending status is **unknown**.
-- Git branch is `main`; no pre-existing working-tree changes were present at inspection. The deployment-readiness change and this document are new work.
+- Frontend `npm run build`: **PASS**. Vite emitted dependency warnings about module-level `use client` directives.
+- Backend `dotnet clean` and `dotnet build --configuration Release`: **PASS**, 0 errors and 4 nullable warnings in `Controllers/WishlistController.cs`.
+- `dotnet ef migrations list --configuration Release`: found five migrations (including store settings/audit and WhatsApp notifications). SQL Server at `localhost\SQLEXPRESS` was unreachable, so applied/pending status is **unknown**. EF tool 8.0.30 is older than runtime 10.0.0.
+- Git branch is `feature/customer-flow`. There were pre-existing local edits and backup files when this inspection began; they have been preserved.
 - No order/auth/delivery/admin E2E flow or live database migration was run. Do not treat those flows as verified.
+- Secret scan found a committed, fixed development bootstrap admin credential. It has been removed from `appsettings.Development.json`; configure local bootstrap credentials through environment variables if needed.
 
 ## Required production configuration
 
@@ -42,7 +43,7 @@ The actual domain names and SQL host are intentionally not invented. For more th
 
 The repository's current base SQL setting is `localhost\\SQLEXPRESS;Database=OMStationaryDb` with Windows integrated authentication. This is a local development setting, not a production connection string. On the inspected workstation, the `MSSQLSERVER` Windows service was running, but the configured `SQLEXPRESS` connection failed. Supply and verify the intended SQL instance and database before deployment.
 
-The bootstrap admin is created only once. Store the bootstrap password securely, sign in after first startup, then remove `Admin__BootstrapPassword` from the deployment environment. If the admin already exists, changing bootstrap settings will not reset its password.
+The bootstrap admin is created only once. Store the bootstrap password securely, sign in after first startup, then remove `Admin__BootstrapPassword` from the deployment environment. If the admin already exists, changing bootstrap settings will not reset its password. No bootstrap credentials are committed in development settings.
 
 ## Store and delivery values to confirm
 
@@ -67,4 +68,26 @@ Other current values: tax rate is 0%; settlement commission is unset. Confirm ap
 - Configure database backup/restore and platform monitoring. No DNS or backup is configured by this repository.
 - Rebuild the frontend with the actual `VITE_API_URL`; validate HTTPS API calls and CORS preflight from the deployed storefront origin.
 
-**Status: NOT READY — REQUIRED ITEMS REMAIN.** Builds pass, but database connectivity, migration application state, live E2E, production secrets/domains, HTTPS/CORS deployment, and backup/restore have not been verified.
+## Exact build and publish commands
+
+Run from the repository root after setting the production API URL for the frontend build:
+
+```powershell
+$env:VITE_API_URL = 'https://<actual-api-hostname>'
+Push-Location .\frontend
+npm ci
+npm run build
+Pop-Location
+
+Push-Location .\backend\OMStationary.Api
+dotnet clean
+dotnet build --configuration Release
+dotnet publish --configuration Release --output ..\..\publish\api
+Pop-Location
+```
+
+Publish `frontend/dist` to the selected static web host and `backend/publish/api` to the selected ASP.NET host. Configure SPA fallback to `index.html` and serve both hosts only over HTTPS. These commands build/publish artifacts; they do not deploy them.
+
+## Current release decision
+
+**Status: CODE READY — PRODUCTION CONFIGURATION REQUIRED. NO-GO for production today.** Frontend and backend release builds pass. Production host/domain, production SQL Server, secrets, HTTPS/CORS origins, backup/restore, live database migration state, and customer/admin E2E remain unverified. COD is implemented in code; online payment is disabled unless Paytm credentials and verification are configured. WhatsApp is explicitly disabled until Business Cloud API credentials are supplied. Do not claim a successful production deployment until staging and release gates above pass.

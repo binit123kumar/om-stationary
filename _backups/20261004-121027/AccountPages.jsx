@@ -37,22 +37,12 @@ export function LoginPage({ onAuth, register = false }) {
       try{const saved=JSON.parse(localStorage.getItem('omcart')||'[]');guest=Array.isArray(saved)?saved:[]}catch{}
       let cart=guest;
       try{
-        const currentResponse=await apiFetch('/api/cart',{},data.accessToken);
-        if(!currentResponse.ok)throw new Error('Could not load the current server cart.');
-        const currentData=await currentResponse.json();
-        const current=mapServerCart(currentData.items);
-        const quantities=new Map(current.map(item=>[item.id,item.q]));
-        for(const item of guest)quantities.set(item.id,Math.max(quantities.get(item.id)||0,item.q));
-        const synced=await apiFetch('/api/cart',{
-          method:'PUT',
+        const merged=await apiFetch('/api/cart/merge',{
+          method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({items:[...quantities].map(([productId,quantity])=>({productId,quantity}))})
+          body:JSON.stringify({items:guest.map(item=>({productId:item.id,quantity:item.q}))})
         },data.accessToken);
-        if(synced.ok){
-          cart=mapServerCart((await synced.json()).items);
-          const refreshed=await apiFetch('/api/cart',{},data.accessToken);
-          if(refreshed.ok)cart=mapServerCart((await refreshed.json()).items);
-        }
+        if(merged.ok){const result=await merged.json();cart=mapServerCart(result.items)}
       }catch{}
 
       onAuth(data.user,cart);

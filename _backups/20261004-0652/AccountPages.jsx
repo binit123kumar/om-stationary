@@ -6,8 +6,7 @@ import './account-pages.css';
 
 export function LoginPage({ onAuth, register = false }) {
   const location = useLocation();
-  const requestedReturn = new URLSearchParams(location.search).get('returnTo') || new URLSearchParams(location.search).get('return');
-  const returnTo = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//') && !requestedReturn.includes('\\') ? requestedReturn : (register?'/':'/account');
+  const returnTo = new URLSearchParams(location.search).get('return') || (register?'/':'/account');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
   const [success,setSuccess]=useState(false);
@@ -33,25 +32,17 @@ export function LoginPage({ onAuth, register = false }) {
 
       saveSession(data);
 
-      let guest=[];
-      try{const saved=JSON.parse(localStorage.getItem('omcart')||'[]');guest=Array.isArray(saved)?saved:[]}catch{}
-      let cart=guest;
+      let cart=[];
       try{
-        const currentResponse=await apiFetch('/api/cart',{},data.accessToken);
-        if(!currentResponse.ok)throw new Error('Could not load the current server cart.');
-        const currentData=await currentResponse.json();
-        const current=mapServerCart(currentData.items);
-        const quantities=new Map(current.map(item=>[item.id,item.q]));
-        for(const item of guest)quantities.set(item.id,Math.max(quantities.get(item.id)||0,item.q));
-        const synced=await apiFetch('/api/cart',{
-          method:'PUT',
+        const guest=JSON.parse(localStorage.getItem('omcart')||'[]');
+        const merged=await apiFetch('/api/cart/merge',{
+          method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({items:[...quantities].map(([productId,quantity])=>({productId,quantity}))})
+          body:JSON.stringify({items:Array.isArray(guest)?guest.map(item=>({productId:item.id,quantity:item.q})):[]})
         },data.accessToken);
-        if(synced.ok){
-          cart=mapServerCart((await synced.json()).items);
-          const refreshed=await apiFetch('/api/cart',{},data.accessToken);
-          if(refreshed.ok)cart=mapServerCart((await refreshed.json()).items);
+        if(merged.ok){
+          const result=await merged.json();
+          cart=mapServerCart(result.items);
         }
       }catch{}
 
@@ -60,7 +51,7 @@ export function LoginPage({ onAuth, register = false }) {
       if(register){
         formElement.reset();
         setSuccess(true);
-        setTimeout(()=>{window.location.href=returnTo||'/';},4000);
+        setTimeout(()=>{window.location.href=returnTo||'/';},1300);
       }else{
         window.location.href=returnTo||'/account';
       }
@@ -81,17 +72,16 @@ export function LoginPage({ onAuth, register = false }) {
 
       <form className="auth-3d-form" onSubmit={submit}>
         {register&&<label>Full name<input name="name" required maxLength="120" autoComplete="name" placeholder="Your full name"/></label>}
-        <label>{register?'Email address':'Email or mobile'}<input name="email" type={register?'email':'text'} required maxLength="254" autoComplete={register?'email':'username'} placeholder={register?'you@example.com':'Email address or mobile number'}/></label>
+        <label>Email address<input name="email" type="email" required maxLength="254" autoComplete="email" placeholder="you@example.com"/></label>
         {register&&<label>Mobile number<input name="phone" type="tel" required minLength="10" maxLength="20" pattern="[+0-9 ()-]{10,20}" autoComplete="tel" placeholder="Mobile number"/></label>}
         <label>Password<input name="password" type="password" required minLength={register?4:1} maxLength="128" autoComplete={register?'new-password':'current-password'} placeholder="Password"/></label>
-        {register&&<small className="auth-password-rule">Use 4 to 128 characters, matching the current API registration limits.</small>}
         {register&&<label>Confirm password<input name="confirmPassword" type="password" required maxLength="128" autoComplete="new-password" placeholder="Re-enter password"/></label>}
         {register&&<label className="auth-check"><input type="checkbox" required/> I agree to the Terms & Conditions</label>}
         {error&&<p className="form-error" role="alert">{error}</p>}
         <button className="btn wide" disabled={busy}>{busy?'Please waitâ€¦':register?'Sign Up':'Login'}</button>
       </form>
 
-      <p className="auth-switch">{register?'Already have an account?':'New to OM Stationary?'} <Link to={`${register?'/login':'/register'}?returnTo=${encodeURIComponent(returnTo)}`}>{register?'Login':'Create account'}</Link></p>
+      <p className="auth-switch">{register?'Already have an account?':'New to OM Stationary?'} <Link to={register?'/login':'/register'}>{register?'Login':'Create account'}</Link></p>
     </div>
 
     {success&&<div className="success-modal-backdrop">

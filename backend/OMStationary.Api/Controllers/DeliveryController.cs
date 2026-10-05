@@ -9,7 +9,8 @@ namespace OMStationary.Api.Controllers;
 
 [ApiController]
 [Route("api/delivery")]
-public class DeliveryController(OmDbContext db, IConfiguration configuration, FulfillmentSelectionService fulfillment, CouponService coupons) : ControllerBase
+public class DeliveryController(OmDbContext db, IConfiguration configuration, FulfillmentSelectionService fulfillment, CouponService coupons,
+    StoreSettingsService storeSettings) : ControllerBase
 {
     [HttpGet("options")]
     public IActionResult Options() => Ok(new
@@ -50,7 +51,8 @@ public class DeliveryController(OmDbContext db, IConfiguration configuration, Fu
             var coupon = string.IsNullOrWhiteSpace(request.CouponCode) ? null : await coupons.Calculate(request.CouponCode, candidate.Subtotal, cancellationToken);
             if (coupon is { Valid: false }) return Ok(new { available = false, reason = coupon.Reason });
             var discount = coupon?.Discount ?? 0;
-            var tax = TaxCalculator.Calculate(candidate.Subtotal - discount, configuration.GetValue<decimal>("Tax:RatePercent"));
+            var taxRate = await storeSettings.GetTaxRatePercentAsync(cancellationToken);
+            var tax = TaxCalculator.Calculate(candidate.Subtotal - discount, taxRate);
             return Ok(new { available = true, city = request.City.Trim(), items = lineItems, subtotal = candidate.Subtotal,
                 deliveryCharge = candidate.DeliveryFee, couponCode = coupon?.Code, discountAmount = discount,
                 taxAmount = tax, total = candidate.Total - discount + tax, estimatedDeliveryMinutes = candidate.EstimatedDeliveryMinutes,
