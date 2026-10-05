@@ -27,8 +27,11 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
     {
         var id = CurrentUserId;
         if (id is null) return Unauthorized();
+        // Captured as a non-nullable local so EF translates the comparison to a parameter and the
+        // nullable CurrentUserId property is not dereferenced inside the query expression.
+        var userId = id.Value;
         var rows = await db.WishlistItems.AsNoTracking()
-            .Where(x => x.Wishlist.UserId == id && x.Product.IsActive)
+            .Where(x => x.Wishlist.UserId == userId && x.Product.IsActive)
             .OrderByDescending(x => x.AddedAt)
             .Select(x => new
             {
@@ -67,8 +70,9 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
     {
         var id = CurrentUserId;
         if (id is null) return Unauthorized();
+        var userId = id.Value;
         var removed = await db.WishlistItems
-            .Where(x => x.Wishlist.UserId == id && x.ProductId == productId)
+            .Where(x => x.Wishlist.UserId == userId && x.ProductId == productId)
             .ExecuteDeleteAsync();
         return removed == 0 ? NotFound() : NoContent();
     }
@@ -78,13 +82,14 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
     {
         var id = CurrentUserId;
         if (id is null) return Unauthorized();
+        var userId = id.Value;
         var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == productId && x.IsActive);
         if (product is null) return NotFound();
 
-        var cart = await db.Carts.Include(x => x.Items).FirstOrDefaultAsync(x => x.UserId == id);
+        var cart = await db.Carts.Include(x => x.Items).FirstOrDefaultAsync(x => x.UserId == userId);
         if (cart is null)
         {
-            cart = new Cart { UserId = id.Value };
+            cart = new Cart { UserId = userId };
             db.Carts.Add(cart);
             await db.SaveChangesAsync();
         }
@@ -94,7 +99,7 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
         else line.Quantity++;
         cart.UpdatedAt = DateTime.UtcNow;
 
-        var wishlist = await db.Wishlists.Include(x => x.Items).FirstOrDefaultAsync(x => x.UserId == id);
+        var wishlist = await db.Wishlists.Include(x => x.Items).FirstOrDefaultAsync(x => x.UserId == userId);
         var target = wishlist?.Items.FirstOrDefault(x => x.ProductId == productId);
         if (target is not null) wishlist!.Items.Remove(target);
         await db.SaveChangesAsync();

@@ -7,3 +7,10 @@ bin/
 obj/
 dist/
 build/
+
+# Timestamped editor/script backups. These are local safety copies, never source: committing them
+# makes the real file look stale in review and ships dead code to production builds.
+*.bak
+*.bak-*
+*.bak[0-9]*
+*.before-*

@@ -1,96 +1,249 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { CheckCircle2, User } from 'lucide-react';
 import { apiBase, apiFetch, clearSession, mapServerCart, readSession, saveSession } from './session.js';
 import './account-pages.css';
 
+// Mirrors the backend policy exactly (RegisterRequest: Required, MinLength(4), MaxLength(128)).
+// The UI must never accept a password the API would reject, and the API policy is never weakened.
+const PASSWORD_MIN = 4;
+const PASSWORD_MAX = 128;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+const MOBILE_PATTERN = /^[6-9]\d{9}$/;
+
+function normaliseMobile(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  // Accept 10-digit, 0-prefixed 11-digit, and +91 / 91-prefixed forms.
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  return digits;
+}
+
+export function validateRegister(form) {
+  const errors = {};
+  const fullName = String(form.fullName || '').trim();
+  const email = String(form.email || '').trim();
+  const mobile = normaliseMobile(form.phone);
+  const password = String(form.password || '');
+
+  if (!fullName) errors.fullName = 'Full name is required.';
+  else if (fullName.length < 3) errors.fullName = 'Enter your full name (at least 3 characters).';
+  else if (fullName.length > 120) errors.fullName = 'Full name must be 120 characters or fewer.';
+
+  if (!email) errors.email = 'Email address is required.';
+  else if (!EMAIL_PATTERN.test(email)) errors.email = 'Enter a valid email address.';
+  else if (email.length > 254) errors.email = 'Email address must be 254 characters or fewer.';
+
+  if (!form.phone || !String(form.phone).trim()) errors.phone = 'Mobile number is required.';
+  else if (!MOBILE_PATTERN.test(mobile)) errors.phone = 'Enter a valid 10 digit Indian mobile number.';
+
+  if (!password) errors.password = 'Password is required.';
+  else if (password.length < PASSWORD_MIN) errors.password = `Password must be at least ${PASSWORD_MIN} characters.`;
+  else if (password.length > PASSWORD_MAX) errors.password = `Password must be ${PASSWORD_MAX} characters or fewer.`;
+
+  if (!form.confirmPassword) errors.confirmPassword = 'Confirm your password.';
+  else if (form.confirmPassword !== password) errors.confirmPassword = 'Passwords do not match.';
+
+  if (!form.acceptTerms) errors.acceptTerms = 'Please accept the Terms & Conditions to continue.';
+  return errors;
+}
+
+export function validateLogin(form) {
+  const errors = {};
+  const identifier = String(form.identifier || '').trim();
+  if (!identifier) errors.identifier = 'Enter your email address or mobile number.';
+  else if (!EMAIL_PATTERN.test(identifier) && !MOBILE_PATTERN.test(normaliseMobile(identifier)))
+    errors.identifier = 'Enter a valid email address or 10 digit mobile number.';
+  if (!form.password) errors.password = 'Password is required.';
+  return errors;
+}
+
+/**
+ * Premium 3D glass sign-in / registration page.
+ *
+ * Both modes post to the real backend (`/api/auth/login`, `/api/auth/register`). Success is only
+ * shown after the API responds 2xx, the returned JWT session is stored, and the guest cart has
+ * been merged into the server cart, so no state on screen is ever optimistic fiction.
+ */
 export function LoginPage({ onAuth, register = false }) {
   const location = useLocation();
-  const returnTo = new URLSearchParams(location.search).get('return') || '/account';
-  const [error,setError]=useState('');
-  const [busy,setBusy]=useState(false);
-  const [success,setSuccess]=useState(false);
+  const navigate = useNavigate();
+  const returnTo = useMemo(() => {
+    const requested = new URLSearchParams(location.search).get('return');
+    // Only allow same-origin in-app paths so `return` can never be used as an open redirect.
+    return requested && requested.startsWith('/') && !requested.startsWith('//') ? requested : '/';
+  }, [location.search]);
 
-  const submit=async event=>{
-    event.preventDefault();
-    const formElement=event.currentTarget;
-    setBusy(true);setError('');
-    const form=new FormData(formElement);
-    const body=register
-      ? {email:form.get('email'),phone:form.get('phone'),fullName:form.get('name'),password:form.get('password')}
-      : {email:form.get('email'),password:form.get('password')};
+  const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', confirmPassword: '', identifier: '', acceptTerms: false });
+  const [errors, setErrors] = useState({});
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-    try{
-      const response=await fetch(`${apiBase}/api/auth/${register?'register':'login'}`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(body)
-      });
-      const data=await response.json();
-      if(!response.ok)throw new Error(data.detail||data.title||(register?'Registration failed.':'Sign in failed.'));
+  useEffect(() => { setErrors({}); setError(''); }, [register]);
 
-      saveSession(data);
+  const set = (key) => (event) => {
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    setForm(current => ({ ...current, [key]: value }));
+    setErrors(current => (current[key] ? { ...current, [key]: '' } : current));
+  };
 
-      let cart=[];
-      try{
-        const guest=JSON.parse(localStorage.getItem('omcart')||'[]');
-        const merged=await apiFetch('/api/cart/merge',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({items:Array.isArray(guest)?guest.map(item=>({productId:item.id,quantity:item.q})):[]})
-        },data.accessToken);
-        if(merged.ok){
-          const result=await merged.json();
-          cart=mapServerCart(result.items);
-        }
-      }catch{}
-
-      onAuth(data.user,cart);
-
-      if(register){
-        formElement.reset();
-        setSuccess(true);
-        setTimeout(()=>{window.location.href=returnTo||'/';},1300);
-      }else{
-        window.location.href=returnTo||'/account';
+  // Persists the returned session, then reconciles the guest cart with the server cart so a
+  // login/register detour from checkout never loses items.
+  //
+  // Uses PUT /api/cart (replace) rather than POST /api/cart/merge (which *adds*): merge would sum a
+  // guest row into a server row that already holds the same items and silently double them. Taking
+  // the larger of the two quantities per product is idempotent, so signing in twice is a no-op.
+  const completeAuth = async (session) => {
+    saveSession(session);
+    let cart = [];
+    try {
+      let guest = [];
+      try { guest = JSON.parse(localStorage.getItem('omcart') || '[]'); } catch { guest = []; }
+      if (!Array.isArray(guest)) guest = [];
+      const guestRows = guest.map(item => ({ productId: item.id, quantity: Math.min(99, Number(item.q) || 1) }));
+      const current = await apiFetch('/api/cart', {}, session.accessToken);
+      const serverRows = current.ok ? (await current.json()).items.map(row => ({ productId: row.productId, quantity: row.quantity })) : [];
+      const quantities = new Map();
+      for (const row of serverRows) quantities.set(row.productId, Math.min(99, row.quantity));
+      for (const row of guestRows) quantities.set(row.productId, Math.min(99, Math.max(quantities.get(row.productId) || 0, row.quantity)));
+      const items = [...quantities.entries()].map(([productId, quantity]) => ({ productId, quantity }));
+      const synced = await apiFetch('/api/cart', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      }, session.accessToken);
+      if (synced.ok) cart = mapServerCart((await synced.json()).items);
+      else {
+        // The replace was rejected (e.g. a guest item was deactivated). Fall back to whatever the
+        // server still considers this customer's cart rather than showing stale local rows.
+        const retry = await apiFetch('/api/cart', {}, session.accessToken);
+        if (retry.ok) cart = mapServerCart((await retry.json()).items);
       }
-    }catch(e){
-      setError(e.message||'Could not connect to the account service.');
-    }finally{
+    } catch { /* keep the device cart that is already loaded in the shell */ }
+    onAuth?.(session.user, cart);
+    return cart;
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    const found = register ? validateRegister(form) : validateLogin(form);
+    setErrors(found);
+    if (Object.keys(found).length) { setError('Please correct the highlighted fields.'); return; }
+
+    setBusy(true); setError('');
+    try {
+      const body = register
+        ? { fullName: form.fullName.trim(), email: form.email.trim(), phone: normaliseMobile(form.phone), password: form.password }
+        : { email: form.identifier.trim(), password: form.password };
+
+      const response = await fetch(`${apiBase}/api/auth/${register ? 'register' : 'login'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        // 400/409 carry a specific detail worth showing; a network failure does not.
+        const detail = data.detail || (Array.isArray(data.errors) && data.errors.length ? data.errors[0]?.msg : '') || '';
+        if (response.status === 0 || response.type === 'error') throw new Error('Could not reach the account service. Please try again.');
+        throw new Error(detail || (register ? 'Registration failed. Please try again.' : 'Sign in failed. Please try again.'));
+      }
+
+      await completeAuth(data);
+
+      if (register) {
+        // The popup is shown only because the API confirmed the account was created.
+        setSuccess(true);
+      } else {
+        navigate(returnTo, { replace: true });
+      }
+    } catch (e) {
+      setError(e?.message || 'Could not connect to the account service.');
+    } finally {
       setBusy(false);
     }
   };
 
+  const goShopping = () => {
+    setSuccess(false);
+    // Registration always lands on the shopping dashboard, per the customer flow requirement.
+    navigate(returnTo === '/' ? '/' : returnTo, { replace: true });
+  };
+
+  const field = (key, label, extra = {}) => (
+    <label key={key}>
+      {label}
+      <input
+        name={key}
+        value={form[key]}
+        onChange={set(key)}
+        aria-invalid={errors[key] ? 'true' : undefined}
+        {...extra}
+      />
+      {errors[key] && <small className="field-error" role="alert">{errors[key]}</small>}
+    </label>
+  );
+
   return <section className="auth-3d-page">
-    <div className="auth-3d-orb orb-a"></div><div className="auth-3d-orb orb-b"></div>
+    <div className="auth-3d-orb orb-a" /><div className="auth-3d-orb orb-b" />
+    <div className="auth-3d-float" aria-hidden="true"><i /><i /><i /></div>
     <div className="auth-3d-card">
       <div className="auth-brand-3d"><span>OM</span><div><b>OM STATIONARY</b><small>Everything you need, one place.</small></div></div>
-      <small className="auth-kicker">{register?'NEW CUSTOMER':'WELCOME BACK'}</small>
-      <h1>{register?'Create your account':'Sign in to continue'}</h1>
-      <p className="auth-sub">{register?'Join OM Stationary and keep your cart, addresses and orders together.':'Sign in to continue your shopping securely.'}</p>
+      <small className="auth-kicker">{register ? 'NEW CUSTOMER' : 'WELCOME BACK'}</small>
+      <h1>{register ? 'Create your account' : 'Sign in to continue'}</h1>
+      <p className="auth-sub">{register
+        ? 'Join OM Stationary to keep your cart, addresses and orders together.'
+        : 'Sign in to continue your shopping securely. Your cart stays exactly as it is.'}</p>
 
-      <form className="auth-3d-form" onSubmit={submit}>
-        {register&&<label>Full name<input name="name" required maxLength="120" autoComplete="name" placeholder="Your full name"/></label>}
-        <label>Email address<input name="email" type="email" required maxLength="254" autoComplete="email" placeholder="you@example.com"/></label>
-        {register&&<label>Mobile number<input name="phone" type="tel" required maxLength="20" autoComplete="tel" placeholder="Mobile number"/></label>}
-        <label>Password<input name="password" type="password" required minLength={register?4:1} maxLength="128" autoComplete={register?'new-password':'current-password'} placeholder="Password"/></label>
-        {register&&<label className="auth-check"><input type="checkbox" required/> I agree to the Terms & Conditions</label>}
-        {error&&<p className="form-error" role="alert">{error}</p>}
-        <button className="btn wide" disabled={busy}>{busy?'Please waitâ€¦':register?'Sign Up':'Login'}</button>
+      <form className="auth-3d-form" onSubmit={submit} noValidate>
+        {register && field('fullName', 'Full Name', {
+          required: true, maxLength: 120, autoComplete: 'name', placeholder: 'Your full name'
+        })}
+        {register ? field('email', 'Email Address', {
+          type: 'email', required: true, maxLength: 254, autoComplete: 'email', placeholder: 'you@example.com'
+        }) : field('identifier', 'Email or Mobile', {
+          type: 'text', required: true, maxLength: 254, autoComplete: 'username', placeholder: 'you@example.com or 9876543210'
+        })}
+        {register && field('phone', 'Mobile Number', {
+          type: 'tel', required: true, maxLength: 15, inputMode: 'numeric', autoComplete: 'tel', placeholder: '10 digit mobile number'
+        })}
+        {field('password', 'Password', {
+          type: 'password', required: true, maxLength: PASSWORD_MAX,
+          minLength: register ? PASSWORD_MIN : 1,
+          autoComplete: register ? 'new-password' : 'current-password',
+          placeholder: register ? `At least ${PASSWORD_MIN} characters` : 'Your password'
+        })}
+        {register && field('confirmPassword', 'Confirm Password', {
+          type: 'password', required: true, maxLength: PASSWORD_MAX, autoComplete: 'new-password', placeholder: 'Re-enter your password'
+        })}
+        {register && <label className="auth-check">
+          <input type="checkbox" name="acceptTerms" checked={form.acceptTerms} onChange={set('acceptTerms')} />
+          <span>I agree to the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link> and <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link></span>
+          {errors.acceptTerms && <small className="field-error" role="alert">{errors.acceptTerms}</small>}
+        </label>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="btn wide" disabled={busy}>{busy ? 'Please wait…' : register ? 'Sign Up' : 'Login'}</button>
       </form>
 
-      <p className="auth-switch">{register?'Already have an account?':'New to OM Stationary?'} <Link to={register?'/login':'/register'}>{register?'Login':'Create account'}</Link></p>
+      <p className="auth-switch">{register ? 'Already have an account?' : 'New to OM Stationary?'}{' '}
+        <Link to={`${register ? '/login' : '/register'}?return=${encodeURIComponent(returnTo)}`}>
+          {register ? 'Login' : 'Create account'}
+        </Link>
+      </p>
     </div>
 
-    {success&&<div className="success-modal-backdrop">
+    {success && <div className="success-modal-backdrop" role="dialog" aria-modal="true" aria-label="Registration successful">
       <div className="success-modal">
-        <div className="success-check"><CheckCircle2 size={48}/></div>
+        <div className="success-check"><CheckCircle2 size={48} /></div>
         <small>OM STATIONARY</small>
         <h2>Successfully Registered!</h2>
-        <p>Your account has been created successfully.</p>
-        <button className="btn wide" onClick={()=>window.location.href=returnTo||'/'}>Go to Shopping</button>
+        <p>Welcome to OM Stationary</p>
+        <button className="btn wide" onClick={goShopping}>Go to Shopping</button>
       </div>
     </div>}
-  </section>
+  </section>;
 }
 export function AccountPage({ user, onLogout }) {
   const [profile, setProfile] = useState(null), [addresses, setAddresses] = useState([]), [message, setMessage] = useState(''), [error, setError] = useState('');
@@ -139,7 +292,7 @@ export function DeliveryDashboard() {
   return <section className="account-page"><div className="pagehead"><small>DELIVERY PARTNER</small><h1>Assigned deliveries</h1><p>Customer/order information is shown only for your assigned delivery work.</p></div>{error && <p role="alert" className="form-error">{error}</p>}{rows.map(d => <article className="panel delivery-card" key={d.id}><h2>{d.orderNumber} · {d.status}</h2><p>Pickup: {d.pickupAddress}</p><p>Drop: {d.dropAddress}</p><p>Customer: {d.customerName} · {d.customerPhone}</p><p>COD amount: ₹{d.codAmount} · Payment: {d.paymentStatus}</p>{d.items.map((i,n)=><p key={n}>{i.productName} × {i.quantity}</p>)}<div className="partner-actions">{['Accepted','ArrivedAtPickup','PickedUp','OutForDelivery','Delivered','Failed'].map(s => <button className="outline" key={s} onClick={async () => { const r = await apiFetch(`/api/delivery/assignments/${d.id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: s }) }); if (r.ok) await load(); else setError((await r.json()).detail || 'Status update rejected.'); }}>{s}</button>)}</div></article>)}</section>;
 }
 
-function UserIcon() { return <span aria-hidden="true">OM</span>; }
+function UserIcon() { return <User size={34} aria-hidden="true" />; }
 
 
 

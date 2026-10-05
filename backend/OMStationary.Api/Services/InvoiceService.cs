@@ -33,7 +33,9 @@ public sealed class InvoiceService(OmDbContext db, IConfiguration configuration)
             CustomerName = order.CustomerName,
             CustomerPhone = order.CustomerPhone,
             CustomerEmail = order.CustomerEmail,
-            DocumentReference = $"/api/invoices/orders/{order.OrderNumber}/pdf"
+            // Must match the real route in OrdersController.GetInvoicePdf. The previous value
+            // (/api/invoices/orders/...) pointed at a controller that does not exist.
+            DocumentReference = $"/api/orders/{Uri.EscapeDataString(order.OrderNumber)}/invoice/pdf"
         };
         foreach (var item in order.Items)
             invoice.Items.Add(new InvoiceLine

@@ -240,8 +240,11 @@ app.Use(async (context, next) =>
     }
 });
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.UseCors("frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
