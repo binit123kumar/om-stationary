@@ -1,0 +1,66 @@
+// Pickup station info panel: address, hours, contact and an
+// embedded Google map. Everything renders from the location API.
+import {
+  Clock, Mail, MapPin, Navigation, Phone
+} from 'lucide-react';
+
+export function PickupStation({ location, compact = false }) {
+  const address = location?.address || '';
+  const target = location?.latitude && location?.longitude
+    ? `${location.latitude},${location.longitude}`
+    : address;
+  const directions = address
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}`
+    : '';
+  const map = address
+    ? `https://maps.google.com/maps?q=${encodeURIComponent(target)}&output=embed`
+    : '';
+
+  return (
+    <section className={`pickup-station${compact ? ' compact' : ''}`}>
+      <div className="pickup-copy">
+        <div className="pickup-title">
+          <MapPin size={19} />
+          <div>
+            <h3>OM Stationary Pickup Station</h3>
+            {address && <span className="pickup-status">&#9679; Pickup available</span>}
+          </div>
+        </div>
+        <p className="pickup-address">
+          {address || 'Set OmStationary:Address in backend configuration to show this location.'}
+        </p>
+        {location?.hours && (
+          <p className="pickup-meta"><Clock size={15} /> {location.hours}</p>
+        )}
+        {location?.phone && (
+          <a className="pickup-meta" href={`tel:${location.phone}`}>
+            <Phone size={15} /> {compact ? 'Contact' : location.phone}
+          </a>
+        )}
+        {!compact && location?.email && (
+          <a className="pickup-meta" href={`mailto:${location.email}`}>
+            <Mail size={15} /> {location.email}
+          </a>
+        )}
+        {address && (
+          <div className="pickup-actions">
+            <a className="btn" href={directions} target="_blank" rel="noreferrer">
+              <Navigation size={16} /> Get Directions
+            </a>
+            {location?.phone && (
+              <a className="outline" href={`tel:${location.phone}`}>Contact</a>
+            )}
+          </div>
+        )}
+      </div>
+      {map && (
+        <iframe
+          title="OM Stationary Pickup Station map"
+          src={map}
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      )}
+    </section>
+  );
+}

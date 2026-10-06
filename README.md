@@ -1,3 +1,4 @@
+star
 # OM Stationary — Storefront, Admin, Partner & Delivery
 
 A first-party e-commerce platform for OM Stationary: React + Vite storefront and admin panel,
