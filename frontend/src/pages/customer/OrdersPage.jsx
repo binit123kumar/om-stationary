@@ -1,7 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
-import { apiFetch } from '../../session.js';
-export function OrdersPage({user}){const nav=useNavigate(),[number,setNumber]=useState(''),[recent,setRecent]=useState([]),[loading,setLoading]=useState(true);useEffect(()=>{let active=true;let ids=[];try{ids=JSON.parse(localStorage.getItem('omorders')||'[]');if(!Array.isArray(ids))ids=[]}catch{};(user?.role==='Customer'?apiFetch('/api/customers/orders').then(r=>r.ok?r.json():[]):Promise.all(ids.map(id=>apiFetch(`${api}/api/orders/${encodeURIComponent(id)}`,{headers:{'X-Tracking-Token':localStorage.getItem(`omtrack:${id}`)||''}}).then(r=>r.ok?r.json():null).catch(()=>null)))).then(rows=>{if(active)setRecent(rows.filter(Boolean))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[user?.id]);return <><div className="pagehead"><small>MY ORDERS</small><h1>Track your orders</h1><p>Orders placed on this device appear here. You can also look up an order number from your confirmation.</p></div><div className="order-lookup panel"><form onSubmit={e=>{e.preventDefault();if(number.trim())nav('/track/'+encodeURIComponent(number.trim()))}}><label className="field-label">Order number<input required value={number} onChange={e=>setNumber(e.target.value)} placeholder="OM123456789"/></label><button className="btn">Find order</button></form></div><div className="rowhead"><h2>Recent orders</h2></div>{loading?<div className="catalog-state">Loading orders...</div>:recent.length?<div className="recent-orders">{recent.map(o=><Link className="recent-order" to={'/track/'+o.orderNumber} key={o.orderNumber}><div><b>{o.orderNumber}</b><span>{o.status} ? {new Date(o.createdAt).toLocaleDateString()}</span></div><b>&#8377;{o.totalAmount}</b><ChevronRight size={18}/></Link>)}</div>:<div className="catalog-state">No recent orders on this device yet.</div>}</>}
-// Lightweight notification polling for signed-in customers. The API is the source of truth:
-// the bell only shows what the Notifications table actually contains.
+// My Orders page.
+//
+// Signed-in customers see their server-side order list; guests see the
+// orders this device placed, resolved through their real tracking tokens.
+import { Bell } from 'lucide-react';
+import { OrderFilters } from '../../components/orders/OrderFilters.jsx';
+import { OrderList } from '../../components/orders/OrderList.jsx';
+import { useOrders } from '../../hooks/useOrders.js';
+
+export function OrdersPage({ user }) {
+  const { recent, loading } = useOrders(user);
+
+  return (
+    <>
+      <div className="pagehead">
+        <small>MY ORDERS</small>
+        <h1>Track your orders</h1>
+        <p>
+          Orders placed on this device appear here. You can also look up
+          an order number from your confirmation.
+        </p>
+      </div>
+
+      <OrderFilters />
+
+      <div className="rowhead"><h2>Recent orders</h2></div>
+      {loading
+        ? <div className="catalog-state">Loading orders...</div>
+        : recent.length
+          ? <OrderList orders={recent} />
+          : <div className="catalog-state">No recent orders on this device yet.</div>}
+
+      <p className="muted">
+        <Bell size={14} /> Order status changes are sent to your
+        notifications when you are signed in.
+      </p>
+    </>
+  );
+}

@@ -1,4 +1,63 @@
+// Full footer with the store visit panel and pickup-station map.
+import { Link } from 'react-router-dom';
+import { Clock, MessageCircle } from 'lucide-react';
 import { usePickupLocation } from '../../hooks/usePickupLocation.js';
 import { PickupStation } from './PickupStation.jsx';
-import { Clock, MessageCircle } from 'lucide-react';
-export function FooterMap(){const location=usePickupLocation();return <footer className="site-footer"><div className="footer-brand"><b>OM STATIONARY</b><span>Everything you need, one place.</span><nav className="footer-links"><Link to="/">Home</Link><Link to="/search">Shop</Link><Link to="/orders">Orders</Link><Link to="/wishlist">Wishlist</Link><Link to="/notifications">Notifications</Link><Link to="/account">Account</Link><Link to="/cart">Cart</Link><Link to="/admin">Admin</Link></nav><b>Help</b><Link to="/help">Help &amp; Support</Link><Link to="/contact">Contact</Link><Link to="/about">About Us</Link><b>Legal</b><Link to="/privacy">Privacy Policy</Link><Link to="/terms">Terms &amp; Conditions</Link><Link to="/refund-policy">Refund Policy</Link>{location?.phone&&<><a href={`tel:${location.phone}`}>{location.phone}</a><a className="whatsapp-link" href={`https://wa.me/${location.phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a></>}{location?.email&&<a href={`mailto:${location.email}`}>{location.email}</a>}<span>&copy; 2026 OM Stationary</span></div><div className="footer-details"><section><h3>Visit Us</h3><b>OM Stationary</b><p>{location?.address||"Address will appear when configured."}</p>{location?.hours&&<p className="pickup-meta"><Clock size={15}/>{location.hours}</p>}</section><PickupStation location={location} compact/></div></footer>}
+
+export function FooterMap() {
+  const location = usePickupLocation();
+  return (
+    <footer className="site-footer">
+      <div className="footer-brand">
+        <b>OM STATIONARY</b>
+        <span>Everything you need, one place.</span>
+        <nav className="footer-links">
+          <Link to="/">Home</Link>
+          <Link to="/search">Shop</Link>
+          <Link to="/orders">Orders</Link>
+          <Link to="/wishlist">Wishlist</Link>
+          <Link to="/notifications">Notifications</Link>
+          <Link to="/account">Account</Link>
+          <Link to="/cart">Cart</Link>
+          <Link to="/admin">Admin</Link>
+        </nav>
+        <b>Help</b>
+        <Link to="/help">Help &amp; Support</Link>
+        <Link to="/contact">Contact</Link>
+        <Link to="/about">About Us</Link>
+        <b>Legal</b>
+        <Link to="/privacy">Privacy Policy</Link>
+        <Link to="/terms">Terms &amp; Conditions</Link>
+        <Link to="/refund-policy">Refund Policy</Link>
+        {location?.phone && (
+          <>
+            <a href={`tel:${location.phone}`}>{location.phone}</a>
+            <a
+              className="whatsapp-link"
+              href={`https://wa.me/${location.phone.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={15} /> WhatsApp
+            </a>
+          </>
+        )}
+        {location?.email && <a href={`mailto:${location.email}`}>{location.email}</a>}
+        <span>&copy; 2026 OM Stationary</span>
+      </div>
+      <div className="footer-details">
+        <section>
+          <h3>Visit Us</h3>
+          <b>OM Stationary</b>
+          <p>{location?.address || 'Address will appear when configured.'}</p>
+          {location?.hours && (
+            <p className="pickup-meta">
+              <Clock size={15} /> {location.hours}
+            </p>
+          )}
+        </section>
+        <PickupStation location={location} compact />
+      </div>
+    </footer>
+  );
+}

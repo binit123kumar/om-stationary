@@ -1,12 +1,25 @@
-import { Plus } from 'lucide-react';
+// Stepper for product quantities (1-99, matching the cart limits).
+import { Minus, Plus } from 'lucide-react';
 
-export function ProductQuantity({ quantity, setQuantity, stock, onAdd }) {
-  return <div className="add-row">
+export function ProductQuantity({ quantity, onChange, min = 1, max = 99 }) {
+  const value = Math.max(min, Math.min(max, Number(quantity) || min));
+  return (
     <div className="qty-mini">
-      <button type="button" onClick={() => setQuantity(value => Math.max(1, value - 1))}>−</button>
-      <b>{quantity}</b>
-      <button type="button" disabled={stock !== null && quantity >= stock} onClick={() => setQuantity(value => Math.min(99, stock ?? 99, value + 1))}>+</button>
+      <button
+        type="button"
+        aria-label="Decrease quantity"
+        onClick={() => onChange(Math.max(min, value - 1))}
+      >
+        <Minus size={14} />
+      </button>
+      <b>{value}</b>
+      <button
+        type="button"
+        aria-label="Increase quantity"
+        onClick={() => onChange(Math.min(max, value + 1))}
+      >
+        <Plus size={14} />
+      </button>
     </div>
-    <button className="add" disabled={stock !== null && (stock < 1 || quantity > stock)} onClick={onAdd}><Plus size={16} /> Add {quantity}</button>
-  </div>;
+  );
 }

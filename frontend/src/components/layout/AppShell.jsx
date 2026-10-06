@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Search, ShoppingCart, User, MapPin, Heart, Bell, ShieldAlert } from 'lucide-react';
-import { apiFetch, clearSession, mapServerCart, readSession } from '../../session.js';
-import { useCatalog, useCategories } from '../../hooks/useCatalog.js';
+import { apiFetch } from '../../services/api.js';
+import { clearSession, mapServerCart, readSession } from '../../services/session.js';
+import { useCatalog } from '../../hooks/useCatalog.js';
+import { useCategories } from '../../hooks/useCategories.js';
 import { useNotifications } from '../../hooks/useNotifications.js';
 import { FooterMap } from './FooterMap.jsx';
 

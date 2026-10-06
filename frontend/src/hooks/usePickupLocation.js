@@ -1,14 +1,17 @@
+// Pickup station location (address, hours, map pins).
 import { useEffect, useState } from 'react';
-import { api } from '../utils/config.js';
-export function usePickupLocation(){
-  const [location,setLocation]=useState(null);
-  useEffect(()=>{
-    let active=true;
-    fetch(api+'/api/locations/om-stationary')
-      .then(r=>r.ok?r.json():Promise.reject())
-      .then(d=>{if(active)setLocation(d)})
-      .catch(()=>{if(active)setLocation(null)});
-    return()=>{active=false};
-  },[]);
+import { getPickupLocation } from '../services/deliveryService.js';
+
+export function usePickupLocation() {
+  const [location, setLocation] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    getPickupLocation()
+      .then((data) => { if (active) setLocation(data); })
+      .catch(() => { if (active) setLocation(null); });
+    return () => { active = false; };
+  }, []);
+
   return location;
 }

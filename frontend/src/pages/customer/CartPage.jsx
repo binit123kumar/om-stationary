@@ -1,3 +1,27 @@
-import { Link } from 'react-router-dom';
-import { ShoppingCart, Plus, Minus, PackageCheck } from 'lucide-react';
-export function CartPage({cart,change,remove,addN}){const subtotal=cart.reduce((s,i)=>s+Number(i.price)*i.q,0),gst=0,delivery=0,total=subtotal+gst+delivery;if(!cart.length)return <div className="empty"><ShoppingCart size={48}/><h1>Your cart is empty</h1><p>Browse the catalogue and add the stationery and office essentials you need.</p><Link className="btn" to="/search">Continue Shopping</Link></div>;return <><div className="pagehead"><small>CART</small><h1>Your Shopping Cart</h1><p>{cart.reduce((s,i)=>s+i.q,0)} item(s). Stock and price are re-checked by the store when you place the order.</p></div><div className="cartlayout"><div>{cart.map(i=><div className="cartitem" key={i.id}><Link to={'/product/'+i.id}>{i.img?<img src={i.img} alt={i.name}/>:<span className="image-placeholder"><PackageCheck/></span>}</Link><div className="cartitem-body"><Link to={'/product/'+i.id}><b>{i.name}</b></Link><small>{i.cat}</small>{i.mrp>i.price&&<span className="discount">{Math.round((1-i.price/i.mrp)*100)}% off</span>}<div className="qty"><button type="button" aria-label={'Decrease '+i.name} onClick={()=>change(i.id,-1)}><Minus/></button><b>{i.q}</b><button type="button" aria-label={'Increase '+i.name} onClick={()=>change(i.id,1)}><Plus/></button></div></div><div className="cartitem-end"><strong>&#8377;{Number(i.price*i.q).toLocaleString('en-IN')}</strong><small>&#8377;{Number(i.price).toLocaleString('en-IN')} each</small><button type="button" className="cart-remove" onClick={()=>remove(i.id)}>Remove</button></div></div>)}</div><aside className="summary"><h3>Order Summary</h3><p><span>Items subtotal</span><b>&#8377;{subtotal.toLocaleString('en-IN')}</b></p><p><span>Discount</span><b>&#8377;0</b></p><p><span>Taxable value</span><b>&#8377;{subtotal.toLocaleString('en-IN')}</b></p><p><span>GST (0%)</span><b>&#8377;{gst}</b></p><p><span>Delivery</span><b>{delivery?'&#8377;'+delivery:'Free (pickup)'}</b></p><hr/><p className="total"><span>Grand Total</span><b>&#8377;{total.toLocaleString('en-IN')}</b></p><small>Delivery charges for doorstep delivery are quoted by the store at checkout.</small><Link className="btn wide" to="/checkout">Proceed to Checkout</Link><Link className="outline wide" to="/search">Continue Shopping</Link></aside></div></>}
+// Shopping cart page.
+import { CartList } from '../../components/cart/CartList.jsx';
+import { CartSummary } from '../../components/cart/CartSummary.jsx';
+import { EmptyCart } from '../../components/cart/EmptyCart.jsx';
+
+export function CartPage({ cart, change, remove, addN }) {
+  const itemCount = cart.reduce((sum, item) => sum + item.q, 0);
+
+  if (!cart.length) return <EmptyCart />;
+
+  return (
+    <>
+      <div className="pagehead">
+        <small>CART</small>
+        <h1>Your Shopping Cart</h1>
+        <p>
+          {itemCount} item(s). Stock and price are re-checked by the store
+          when you place the order.
+        </p>
+      </div>
+      <div className="cartlayout">
+        <CartList items={cart} onChange={change} onRemove={remove} />
+        <CartSummary cart={cart} />
+      </div>
+    </>
+  );
+}

@@ -1,6 +1,107 @@
-import React, { useEffect, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Search } from 'lucide-react';
-import { api } from '../../utils/config.js';
+// Product listing / search page.
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Search as SearchIcon } from 'lucide-react';
 import { ProductCard } from '../../components/products/ProductCard.jsx';
-export function ProductListingPage({add,addN,catalog,wishlist,toggleWishlist}){const route=useLocation(),params=new URLSearchParams(route.search),q=(params.get('q')||'').trim(),cat=params.get('cat')||'', [sort,setSort]=useState('relevance'),[page,setPage]=useState(1),[debounced,setDebounced]=useState(q),[items,setItems]=useState([]),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(''),[categories,setCategories]=useState([]),[brand,setBrand]=useState(''),[minPrice,setMinPrice]=useState(''),[maxPrice,setMaxPrice]=useState(''),[available,setAvailable]=useState(false);useEffect(()=>{const t=setTimeout(()=>{setDebounced(q);setPage(1)},300);return()=>clearTimeout(t)},[q]);useEffect(()=>{fetch(api+'/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(()=>setCategories([...new Set(catalog.products.map(p=>p.cat))]))},[catalog.products]);useEffect(()=>{let active=true;setLoading(true);setError('');const params=new URLSearchParams({paginated:'true',page:String(page),pageSize:'24',sort});if(debounced)params.set('q',debounced);if(cat)params.set('category',cat);if(brand.trim())params.set('brand',brand.trim());if(minPrice)params.set('minPrice',minPrice);if(maxPrice)params.set('maxPrice',maxPrice);if(available)params.set('available','true');fetch(api+'/api/products?'+params.toString()).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not search products.');return d}).then(d=>{if(active){setItems((d.items||[]).map(p=>({id:p.id,name:p.name,price:p.price,mrp:p.mrp,cat:p.category,img:p.imageUrl,desc:p.description,brand:p.brand,sku:p.sku})));setTotal(d.total||0)}}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[debounced,cat,sort,page,brand,minPrice,maxPrice,available]);const pages=Math.max(1,Math.ceil(total/24));return <><div className="pagehead"><small>PRODUCTS</small><h1>{debounced?`Results for "${debounced}"`:cat||'Shop all products'}</h1><p>{loading?'Searching catalogue...':`${total} ${total===1?'product':'products'} in the OM Stationary catalogue`}</p></div><div className="listing-tools"><div className="category-filters"><Link className={!cat?'selected':''} to="/search">All</Link>{categories.map(c=><Link className={cat===c?'selected':''} key={c} to={'/search?cat='+encodeURIComponent(c)}>{c}</Link>)}</div><label>Sort by <select value={sort} onChange={e=>{setPage(1);setSort(e.target.value)}}><option value="relevance">Relevance</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option></select></label></div><div className="search-filters"><label>Brand<input value={brand} onChange={e=>{setPage(1);setBrand(e.target.value)}} placeholder="Filter brand"/></label><label>Min price<input type="number" min="0" value={minPrice} onChange={e=>{setPage(1);setMinPrice(e.target.value)}}/></label><label>Max price<input type="number" min="0" value={maxPrice} onChange={e=>{setPage(1);setMaxPrice(e.target.value)}}/></label><label className="filter-check"><input type="checkbox" checked={available} onChange={e=>{setPage(1);setAvailable(e.target.checked)}}/> In stock at OM Stationary</label></div>{error?<div className="catalog-state error" role="alert">{error}</div>:loading?<div className="catalog-state">Loading products...</div>:items.length?<><div className="grid">{items.map(p=><ProductCard key={p.id} p={p} add={add} addN={addN} saved={wishlist.includes(p.id)} toggleWishlist={toggleWishlist}/>)}</div><nav className="pagination" aria-label="Product pages"><button className="outline" disabled={page<=1} onClick={()=>setPage(page-1)}>Previous</button><span>Page {page} of {pages}</span><button className="outline" disabled={page>=pages} onClick={()=>setPage(page+1)}>Next</button></nav></>:<div className="empty"><Search size={40}/><h2>No matching products</h2><p>Try another product name or browse a category.</p><Link className="btn" to="/search">Clear search</Link></div>}</>}
+import { ProductFilters } from '../../components/products/ProductFilters.jsx';
+import { Pagination } from '../../components/common/Pagination.jsx';
+import { useProductSearch, useSearchCategories } from '../../hooks/useProducts.js';
+import { PAGE_SIZE } from '../../utils/constants.js';
+
+export function ProductListingPage({ add, addN, catalog, wishlist, toggleWishlist }) {
+  const route = useLocation();
+  const params = new URLSearchParams(route.search);
+  const q = (params.get('q') || '').trim();
+  const cat = params.get('cat') || '';
+
+  const [sort, setSort] = useState('relevance');
+  const [page, setPage] = useState(1);
+  const [debounced, setDebounced] = useState(q);
+  const [brand, setBrand] = useState('');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [available, setAvailable] = useState(false);
+
+  // Debounce the query so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => { setDebounced(q); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  const filters = useMemo(() => ({
+    q: debounced,
+    category: cat,
+    brand,
+    minPrice,
+    maxPrice,
+    available,
+    sort,
+    page,
+    pageSize: PAGE_SIZE
+  }), [debounced, cat, brand, minPrice, maxPrice, available, sort, page]);
+
+  const { items, total, loading, error } = useProductSearch(filters);
+  const categories = useSearchCategories(catalog.products);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <>
+      <div className="pagehead">
+        <small>PRODUCTS</small>
+        <h1>{debounced ? `Results for "${debounced}"` : cat || 'Shop all products'}</h1>
+      </div>
+
+      <ProductFilters
+        categories={categories}
+        category={cat}
+        onCategory={(value) => { setPage(1); }}
+        brand={brand}
+        onBrand={(value) => { setPage(1); setBrand(value); }}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onPrice={({ minPrice: nextMin, maxPrice: nextMax }) => {
+          setPage(1);
+          setMinPrice(nextMin);
+          setMaxPrice(nextMax);
+        }}
+        available={available}
+        onAvailable={(value) => { setPage(1); setAvailable(value); }}
+        sort={sort}
+        onSort={(value) => { setPage(1); setSort(value); }}
+        resultCount={total}
+        loading={loading}
+      />
+
+      {error
+        ? <div className="catalog-state error" role="alert">{error}</div>
+        : loading
+          ? <div className="catalog-state">Loading products...</div>
+          : items.length
+            ? (
+              <>
+                <div className="grid">
+                  {items.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      add={add}
+                      addN={addN}
+                      saved={wishlist.includes(product.id)}
+                      toggleWishlist={toggleWishlist}
+                    />
+                  ))}
+                </div>
+                <Pagination page={page} pages={pages} onPage={setPage} />
+              </>
+            )
+            : (
+              <div className="empty">
+                <SearchIcon size={40} />
+                <h2>No matching products</h2>
+                <p>Try another product name or browse a category.</p>
+                <Link className="btn" to="/search">Clear search</Link>
+              </div>
+            )}
+    </>
+  );
+}

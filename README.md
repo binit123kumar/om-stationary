@@ -1,170 +1,220 @@
-# OM Stationary
+star
+# OM Stationary — Storefront, Admin, Partner & Delivery
 
-First-party stationery e-commerce storefront with an ASP.NET Core API, SQL Server persistence,
-admin tools, partner and delivery surfaces, UPI initiation, and WhatsApp integration hooks.
+A first-party e-commerce platform for OM Stationary: React + Vite storefront and admin panel,
+ASP.NET Core Web API (.NET 10), Entity Framework Core, Microsoft SQL Server (`OMStationaryDb`).
 
-OM Stationary sells its own inventory. Approved partner shops can help fulfil an order; this is not
-a public multi-vendor marketplace.
+OM Stationary sells its **own** stock. `FirstPartyFulfillmentProvider` fulfils from OM Stationary
+inventory first and only falls back to an approved partner shop acting on OM Stationary's behalf.
+There is no marketplace and no Amazon/Flipkart/Blinkit/JioMart integration — the earlier "aggregator"
+framing was removed because no official partner agreement or API authorization exists.
 
-## Technology
-
-- React, Vite, React Router, and Lucide icons
-- ASP.NET Core 10 and Entity Framework Core
-- Microsoft SQL Server (`OMStationaryDb`)
-- JWT access tokens, hashed refresh tokens, and role-based API authorization
-- Nginx for the production storefront, HTTPS termination, and same-origin `/api` proxy
+## Stack
+- React + Vite + React Router + Lucide icons
+- ASP.NET Core Web API (.NET 10), custom JWT bearer authentication handler
+- Entity Framework Core with SQL Server
+- Plain CSS (`frontend/src/styles.css`)
+- Swagger UI (Development only — never mapped in Production)
 
 ## Project layout
-
-```text
-frontend/src/                 Storefront, checkout, admin, partner, and delivery UI
-  main.jsx                    Site shell, catalogue, account routes, and admin panel
-  AccountPages.jsx            Login, registration, account, partner, and delivery views
-  Checkout.jsx                Cart checkout, pickup/delivery, and UPI initiation
-  Invoice.jsx                 Invoice and secure PDF download
-  AdminCharts.jsx             Lazy-loaded admin charts
-  session.js                  API base URL, access/refresh token handling, cart mapping
+```
+frontend/                React storefront + admin/partner/delivery panels
+  src/main.jsx           Shell, home, search, product, cart, wishlist, tracking, notifications
+  src/Checkout.jsx       Checkout, order result, payment, partner & delivery dashboards
+  src/Invoice.jsx        Tax invoice + secure PDF download
+  src/AccountPages.jsx   Login/register, account, addresses, notifications
+  src/session.js         Token storage, apiFetch with automatic refresh
+  src/styles.css         Design system
 backend/OMStationary.Api/
-  Controllers/                 HTTP endpoints
-  Services/                    Fulfilment, order state, payments, invoices, and notifications
-  Data/OmDbContext.cs           SQL Server entity mapping
-  Migrations/                   EF Core schema migrations
-backend/OMStationary.Api.Tests/ Unit tests for order transitions and notification delivery
-Dockerfile                     API and frontend multi-stage image builds
-docker-compose.yml             HTTPS storefront, API, and SQL Server services
-nginx.conf                     TLS, SPA fallback, and API reverse proxy
+  Controllers/           One controller per resource area
+  Services/              Tax, coupons, fulfillment, invoices, WhatsApp, settlements, tokens
+  Data/OmDbContext.cs    EF Core model for the existing OMStationaryDb
+  Migrations/            Existing migrations (see below)
 ```
 
-## Run locally
+## Running locally
 
-Start SQL Server and configure `ConnectionStrings__DefaultConnection` if the checked-in local
-connection does not match your SQL instance.
-
+### Backend
 ```powershell
 cd backend\OMStationary.Api
 dotnet restore
 dotnet run
 ```
+There is **no `Properties/launchSettings.json`**, so Kestrel binds `http://localhost:5000`.
+`GET /api/health` reports API and database availability. The API stays up if SQL Server is
+unavailable and returns `503` for database operations until it is reachable.
 
-The Development launch profile binds the API to `http://localhost:5000`. On startup the API checks
-the schema and applies only safe, recognized migrations. `/api/health` reports API and database
-status. Sample categories and products are seeded only in Development; production inventory must be
-loaded and checked by the store operator. Swagger is available only in Development.
+Swagger is available at `/swagger` **only in Development**.
 
+### Frontend
 ```powershell
 cd frontend
 npm install
 npm run dev
 ```
+Set `frontend/.env`:
+```env
+VITE_API_URL=http://localhost:5000
+```
+This must match the port the API actually binds.
 
-The Vite Development server runs at `http://localhost:5173` and uses the API at port 5000. Override
-`VITE_API_URL` when the API is hosted elsewhere. In Docker, the frontend uses a same-origin `/api`
-proxy instead.
+### Development bootstrap admin
+`appsettings.Development.json` creates `admin@omstationary.local` on first start if the account
+does not exist. This file is **development-only**. Production must set `Admin__BootstrapEmail` /
+`Admin__BootstrapPassword` / `Admin__BootstrapPhone` as environment variables, or provision the
+account directly. `Admin:BootstrapOverwritePassword` is opt-in and is never enabled in production.
 
-For a stable local login across API restarts, set `Jwt__SigningKey` to a random value of at least 32
-UTF-8 bytes. If it is omitted in Development, the API generates a new key at startup, which invalidates
-old access tokens.
+## Database
 
-## Verified project state (2026-10-06)
+Reuses the existing **`OMStationaryDb`**. The database is never dropped, reset or recreated.
 
-- Frontend production build succeeds. Admin charts are split into a lazy-loaded chunk. Vite still
-  reports four upstream `use client` directive warnings from React Router and Lucide.
-- API Debug and Release builds succeed with zero warnings.
-- Backend test suite passes: 14 passed, 0 failed, 0 skipped. Tests cover the order state machine, phone
-  normalization, and SMTP/Twilio notification behavior without contacting real providers.
-- SQL Server connection to `OMStationaryDb` succeeds. All five repository migrations are applied.
-- Live API smoke checks exercised customer registration, login, token refresh and revocation,
-  customer/admin role separation, server cart updates, wishlist operations, UPI order initiation,
-  invoice access, and order history. Test account/order data was removed and the test stock was
-  restored.
-- A payment-status response naming collision found during the live checks was corrected and
-  retested. UPI remains unverified by the application; an order stays pending until staff confirms
-  it.
-- Browser console/mobile testing could not run because this environment has no browser session.
-  Docker build and Compose validation could not run because the Docker CLI/engine is unavailable.
-
-## Customer features
-
-Implemented customer routes include home, catalogue/search, product detail, cart, wishlist,
-checkout, login/registration, account, order history/tracking, notifications, invoice/PDF, about,
-contact, help, privacy, terms, and refund policy. Server-calculated stock and order totals are
-authoritative. Cart contents are saved locally for guests and synchronized with the server for signed
-in customers; login reconciliation uses the larger quantity per product and replaces the server cart
-so repeated sign-ins do not add duplicate quantities.
-
-Pickup and delivery options come from server configuration. Delivery is subject to enabled service
-areas, address coordinates, and stock availability. COD is supported. Store settings, inventory,
-delivery partner accounts, and payment confirmation require appropriate staff roles.
-
-## Order and payment behavior
-
-Order status changes are checked by `OrderStateMachine`. Invalid transitions are rejected by the API.
-Stock deductions and order creation run in a database transaction. Invoice/tracking reads require the
-owner, an Admin, or the matching tracking token.
-
-The current local configuration exposes UPI initiation. The API builds an exact-amount `upi://pay`
-intent/QR payload, but it does not verify payment through a provider callback or signed status API.
-Payment verification and automated refunds are not implemented. Do not mark an online order Paid
-based on a browser redirect or customer-provided transaction value. COD payment can be confirmed by
-an Admin only after pickup/delivery.
-
-## Admin, partner, and delivery
-
-Admin APIs require the `Admin` role. The admin interface has dashboard metrics/charts, order actions,
-product and stock controls, WhatsApp settings, and read-only data panels for the other available
-admin endpoints. Category, coupon, store-settings, invoice, customer, payment, delivery, and report
-endpoints exist; several of those panels do not yet provide full edit workflows. Admin end-to-end
-testing requires an Admin account and was not completed in this environment.
-
-Partner self-registration creates an unapproved shop. Partner APIs are role protected; delivery
-partners can only view and update assigned work. Partner and delivery end-to-end flows still need
-role-specific test accounts.
-
-## Notifications
-
-- **WhatsApp:** Business Cloud API service, admin settings, attempt log, retry path, and order event
-  hooks are present. The checked-in provider is a disabled placeholder with no usable credentials;
-  no actual send was tested.
-- **Email:** SMTP send implementation is wired to customer order/status/payment events and configured
-  admin new-order alerts. It fails closed when disabled or incomplete. SMTP settings are not present
-  in this workspace; actual delivery is unverified.
-- **SMS:** Twilio request implementation is wired to customer order/status/payment events and
-  configured admin new-order alerts. A provider acceptance is not a delivery receipt; status
-  callbacks are not implemented. Twilio credentials are absent and the service is disabled here.
-
-## Not implemented
-
-- Google/social login and backend Google token verification
-- Forgot-password and reset-password endpoints/tokens
-- Online payment verification callbacks, signed webhooks, and automated provider refunds
-- Browser-based desktop/mobile console verification in this environment
-
-## Database migrations
-
-The five migrations in the current local database are:
-
+Migrations (all existing — do not delete):
 - `20260929022303_InitialMvpSchema`
 - `20260929030714_MvpFoundation`
 - `20260930065632_OmStationaryDirectCommerce`
 - `20261003093401_AdminStoreSettingsAndAuditValues`
 - `20261003110615_WhatsAppNotifications`
 
-The local database reported all five as applied. Back up any production database before migration;
-never delete or recreate an existing production-like database to test a change.
+`SafeMigrationBootstrap` inspects the live schema first. On an unrecognized legacy schema it stops
+and refuses to migrate rather than guessing. **Back up production data before the first upgraded
+startup, and rehearse against a staging copy.**
 
-## Docker deployment
+## Security model
 
-The Compose stack requires Docker, a SQL Server SA secret, a random JWT signing key, an exact HTTPS
-storefront origin, and TLS certificate files. It intentionally defaults delivery, online UPI,
-WhatsApp, email, and SMS to disabled. Fill `docker.env.example` in an untracked `.env` file, place
-`fullchain.pem` and `privkey.pem` in the configured TLS directory, then run:
+| Concern | Implementation |
+|---|---|
+| JWT | HS256, issuer/audience/expiry verified, signature checked in constant time |
+| Active user | Every authenticated request re-reads the user and rejects inactive accounts |
+| Role integrity | A token whose `role` claim no longer matches the stored role is rejected |
+| Refresh tokens | Hashed at rest with per-token salt, rotated on refresh, revocable on logout |
+| Order creation | `POST /api/orders` requires an authenticated JWT — anonymous is `401` |
+| Order/tracking/invoice read | Owner, Admin, or holder of the order tracking token only; failures return `404` so an order number is never confirmed to an outsider |
+| Admin APIs | `[Authorize(Roles = "Admin")]`. There is no `X-Admin-Key` header path |
+| Payment | Server-calculated totals, server-verified stock, COD confirmed only by an admin after delivery. Online payment is **fail-closed** until gateway credentials exist |
+| Passwords | New passwords: min 8 chars with upper, lower, digit and special. Existing hashes are untouched |
+| CORS | Exact-origin allowlist. Non-Development **refuses to start** without HTTPS origins |
+| Errors | Global handler returns `503` with no stack trace; security headers on every response |
+| Swagger | Development only |
+
+## Routes
+
+**Customer** `/` `/search` `/product/:id` `/cart` `/checkout` `/wishlist` `/orders`
+`/track/:id` `/invoice/:id` `/account` `/notifications` `/login` `/register`
+`/about` `/contact` `/help` `/privacy` `/terms` `/refund-policy`
+
+**Admin** `/admin` (orders, products, categories, inventory, customers, payments, coupons,
+delivery, partner shops, reports, invoices, notifications, WhatsApp, settings, audit log)
+
+**Partner** `/partner` · **Delivery** `/delivery`
+
+## API
+
+Public:
+- `GET /api/products?q=&category=&brand=&sku=&minPrice=&maxPrice=&available=&sort=&page=&pageSize=&paginated=`
+- `GET /api/products/{id}` · `GET /api/products/slug/{slug}`
+- `GET /api/categories`
+- `GET /api/delivery/options` · `POST /api/delivery/quote`
+- `GET /api/locations/om-stationary`
+- `GET /api/health`
+
+Auth:
+- `POST /api/auth/register` · `POST /api/auth/login` (email **or** mobile) · `POST /api/auth/refresh`
+- `POST /api/auth/logout` · `GET /api/auth/me`
+
+Customer (`Bearer`, role `Customer`):
+- `GET|PUT /api/cart` · `POST /api/cart/items` · `PUT|DELETE /api/cart/items/{itemId}` · `POST /api/cart/merge`
+- `GET|POST|DELETE /api/wishlist` · `POST /api/wishlist/{productId}/move-to-cart`
+- `GET|PUT /api/customers/me` · `GET|POST /api/customers/addresses` · `PUT|DELETE /api/customers/addresses/{id}`
+- `GET /api/customers/orders`
+- `GET /api/notifications` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all`
+- `POST /api/coupons/validate`
+- `POST /api/orders` (requires authentication)
+
+Order read (owner / admin / tracking token):
+- `GET /api/orders/{orderNumber}`
+- `GET /api/orders/{orderNumber}/invoice`
+- `GET /api/orders/{orderNumber}/invoice/pdf`
+
+Order workflow:
+- `GET /api/orders` (admin) · `GET /api/orders/status-workflow`
+- `PATCH /api/orders/{id}/status` (admin, state-machine validated)
+- `PATCH /api/orders/{id}/payment` (admin, **COD cash receipt only**)
+- `POST /api/orders/{id}/delivery` (admin)
+
+Admin (`Bearer`, role `Admin`), all under `/api/admin`:
+- `dashboard`, `analytics`, `filter-options`, `customers`, `payments`, `invoices`, `wishlist`,
+  `notifications`, `audit-log`, `reports`, `reports/export`
+- `products`, `POST products`, `PUT products/{id}`, `DELETE products/{id}`, `POST products/{id}/stock`
+- `categories`, `PUT categories/{id}`, `coupons`, `PUT coupons/{id}`
+- `/api/admin/settings` store settings
+- `/api/admin/whatsapp` settings, `test`, `{id}/retry`
+
+Delivery:
+- `GET /api/delivery/management/partners` (admin), `POST` (admin), `GET management/assignments` (admin)
+- `GET /api/delivery/assignments` (DeliveryPartner), `PATCH /api/delivery/assignments/{id}/status`
+
+Partner (`Bearer`, role `PartnerShop`), all under `/api/partner`:
+- `POST /api/partner/register` — self-registration, creates an **unapproved** shop
+- `GET|PUT /api/partner/shop` · `GET|PUT /api/partner/inventory`
+- `GET /api/partner/orders` · `PATCH /api/partner/orders/{id}/status`
+- `GET /api/partner/shops` (admin) · `PUT /api/partner/shops/{id}/approval` (admin)
+
+A partner may only set an order to **Accepted, Preparing or Ready for Pickup**. Completion and
+payment stay with the store.
+
+## Order state machine
+
+```
+Placed/Pending -> Confirmed -> Preparing -> Ready for Pickup -> Out for Delivery -> Delivered
+                                                   (pickup)         -> Picked Up -> Delivered
+```
+Invalid transitions are rejected by `OrderStateMachine`. Every accepted change writes an
+`OrderStatusHistory` row. Partner settlement is created on **every** path that reaches `Delivered`,
+not only the delivery-partner path.
+
+## Payments
+
+COD is fully functional. Online payment is **fail-closed**: with no gateway credentials configured,
+`IPaymentGateway` resolves to `UnconfiguredPaymentGateway`, the UI shows "Online payment is currently
+unavailable", and `PaymentStatus` is never marked `Paid` from a browser redirect, client callback or
+unauthenticated poll. To enable Paytm QR, set `Payments__Enabled=true`, `Payments__Provider=Paytm`
+and the `Payments__Paytm__*` values.
+
+## WhatsApp / Email / SMS
+
+`WhatsAppNotificationService` is event-driven (new order, confirmed, preparing, ready for pickup,
+out for delivery, delivered, payment received, low stock, new customer). Settings persist to the
+database via `/api/admin/whatsapp`; the **access token is never stored or returned** and must come
+from configuration. With no credentials, WhatsApp stays disabled and production-safe.
+Email and SMS are architectural placeholders — with no provider configured they report disabled
+rather than pretending to send.
+
+## Production configuration
+
+Values must come from environment variables. Nothing sensitive is committed: `appsettings.json`
+ships every secret blank.
 
 ```powershell
-docker compose config
-docker compose up --build
+$env:ConnectionStrings__DefaultConnection = "Server=...;Database=OMStationaryDb;..."
+$env:Jwt__SigningKey                      = "<random, >= 32 UTF-8 bytes>"
+$env:Cors__AllowedOrigins__0             = "https://yourdomain.com"
+$env:Admin__BootstrapEmail               = "admin@yourdomain.com"
+$env:Admin__BootstrapPassword            = "<strong one-off password>"
 ```
 
-The API and SQL Server are private to the Compose network; Nginx exposes ports 80/443 and proxies
-`/api` to the API. Docker validation has not been run in the current environment.
+The API **refuses to start** outside Development without a signing key and HTTPS CORS origins.
 
-See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) for release gates and configuration details.
+## Deliberate boundaries
+- Online payment fails closed until gateway credentials and webhook verification are configured.
+- Reviews are not implemented — there is no review backend, so the product page shows an honest
+  empty state rather than fabricated reviews.
+- Mobile OTP login and social login are not implemented; the UI does not advertise them.
+- There is no automated test project. `dotnet test` has nothing to run.
+
+## Builds
+```powershell
+cd frontend                  ; npm run build
+cd backend\OMStationary.Api  ; dotnet build
+```
+
+See `PRODUCTION_DEPLOYMENT.md` for publish and deployment steps.

@@ -1,0 +1,4 @@
+import { useEffect, useState } from 'react';
+import { getMe } from '../../services/authService.js';
+
+export function DeliveryProfilePage() { const [user,setUser]=useState(null); const [error,setError]=useState(''); useEffect(()=>{getMe().then(async r=>{if(!r.ok)throw new Error('Could not load delivery profile.');setUser(await r.json());}).catch(e=>setError(e.message));},[]); return <section className="account-page"><div className="pagehead"><small>DELIVERY PARTNER</small><h1>Profile</h1><p>Account information available from the signed-in account service.</p></div>{error&&<p role="alert" className="form-error">{error}</p>}{user&&<article className="panel"><p>Name: {user.fullName||user.name}</p><p>Email: {user.email}</p><p>Phone: {user.phone||'—'}</p><p>Role: {user.role}</p></article>}</section>; }

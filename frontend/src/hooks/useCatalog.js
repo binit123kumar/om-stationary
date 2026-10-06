@@ -1,4 +1,22 @@
+// Full catalogue loader (home page, recently viewed, lookups).
 import { useEffect, useState } from 'react';
-import { api } from '../utils/config.js';
-export function useCategories(){const [categories,setCategories]=useState([]);useEffect(()=>{let active=true;fetch(api+'/api/categories').then(r=>r.ok?r.json():[]).then(rows=>{if(active&&Array.isArray(rows))setCategories(rows)}).catch(()=>{});return()=>{active=false}},[]);return categories}
-export function useCatalog(){const [products,setProducts]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');useEffect(()=>{let active=true;fetch(api+'/api/products').then(r=>r.ok?r.json():Promise.reject()).then(rows=>{if(active)setProducts(rows.map(p=>({id:p.id,name:p.name,price:p.price,mrp:p.mrp,cat:p.category,img:p.imageUrl,desc:p.description}))) }).catch(()=>{if(active)setError('Could not load products. Check the API connection and try again.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);return{products,loading,error}}
+import { listProducts } from '../services/productService.js';
+
+export function useCatalog() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    listProducts()
+      .then((rows) => { if (active) setProducts(rows); })
+      .catch(() => {
+        if (active) setError('Could not load products. Check the API connection and try again.');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  return { products, loading, error };
+}
