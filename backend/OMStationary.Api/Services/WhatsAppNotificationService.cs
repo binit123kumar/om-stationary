@@ -81,7 +81,10 @@ public sealed class WhatsAppOptions
     public static string Normalise(string? value)
     {
         var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
-        return digits.Length == 10 ? "91" + digits : digits;
+        if (digits.StartsWith("00", StringComparison.Ordinal)) digits = digits[2..];
+        if (digits.Length == 11 && digits[0] == '0') digits = digits[1..];
+        if (digits.Length == 10) return "91" + digits;
+        return digits;
     }
 
     public static bool IsPhoneNumber(string? value)

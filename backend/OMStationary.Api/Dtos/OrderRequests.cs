@@ -6,7 +6,10 @@ public class CreateOrderRequest
 {
     [Required, StringLength(120)] public string CustomerName { get; set; } = "";
     [Required, Phone, StringLength(20)] public string CustomerPhone { get; set; } = "";
-    [EmailAddress, StringLength(254)] public string CustomerEmail { get; set; } = "";
+    // Nullable on purpose. CustomerEmail has no Required, but [EmailAddress] still rejects the
+    // empty string, so an omitted email made the whole order fail model validation with a 400.
+    // A guest who does not want to give an email can now place a COD pickup order.
+    [EmailAddress, StringLength(254)] public string? CustomerEmail { get; set; }
     [StringLength(600)] public string BillingAddress { get; set; } = "";
     [Required, StringLength(20)] public string FulfillmentMethod { get; set; } = "Pickup";
     [Required, StringLength(20)] public string PaymentMethod { get; set; } = "COD";

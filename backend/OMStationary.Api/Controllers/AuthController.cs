@@ -22,6 +22,17 @@ public sealed class AuthController(OmDbContext db, TokenService tokens, IWhatsAp
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var phone = request.Phone.Trim();
+
+        // Password complexity validation for new registrations
+        if (request.Password.Length < 8)
+            return BadRequest(new { detail = "Password must be at least 8 characters long." });
+        var hasUpper = request.Password.Any(char.IsUpper);
+        var hasLower = request.Password.Any(char.IsLower);
+        var hasDigit = request.Password.Any(char.IsDigit);
+        var hasSpecial = request.Password.Any(c => !char.IsLetterOrDigit(c));
+        if (!hasUpper || !hasLower || !hasDigit || !hasSpecial)
+            return BadRequest(new { detail = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character." });
+
         if (await db.Users.AnyAsync(x => x.Email == email || x.Phone == phone))
             return Conflict(new { detail = "An account already exists for this email or mobile number." });
         var roleId = await db.Roles.Where(x => x.Name == "Customer").Select(x => (int?)x.Id).FirstOrDefaultAsync();

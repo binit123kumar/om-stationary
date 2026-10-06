@@ -49,6 +49,15 @@ builder.Services.AddHttpClient(WhatsAppHttpClient.Name, client =>
 });
 builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 builder.Services.AddScoped<StockAlertService>();
+
+// Email notification service (SMTP)
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
+builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
+
+// SMS notification service
+builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection(SmsOptions.SectionName));
+builder.Services.AddHttpClient<ISmsNotificationService, SmsNotificationService>(client =>
+    client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<IPaymentGateway>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -108,7 +117,7 @@ try
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<OmDbContext>();
     await SafeMigrationBootstrap.ApplyAsync(db);
-    if (!await db.Categories.AnyAsync())
+    if (app.Environment.IsDevelopment() && !await db.Categories.AnyAsync())
     {
         db.Categories.AddRange(
             new Category { Name = "Stationery" },
@@ -118,7 +127,7 @@ try
             new Category { Name = "School Supplies" });
         await db.SaveChangesAsync();
     }
-    if (!await db.Products.AnyAsync())
+    if (app.Environment.IsDevelopment() && !await db.Products.AnyAsync())
     {
         var categories = await db.Categories.AsNoTracking().ToDictionaryAsync(x => x.Name, x => x.Id);
         var now = DateTime.UtcNow;
@@ -240,8 +249,11 @@ app.Use(async (context, next) =>
     }
 });
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.UseCors("frontend");
 app.UseRateLimiter();
 app.UseAuthentication();

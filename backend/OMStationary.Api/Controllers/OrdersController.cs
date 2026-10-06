@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -16,18 +17,15 @@ namespace OMStationary.Api.Controllers;
 public class OrdersController(OmDbContext db, IConfiguration configuration, FulfillmentSelectionService fulfillment,
     ICodPaymentProvider codPayments, CouponService coupons, InvoiceService invoices,
     NotificationService notifications, IWhatsAppNotificationService whatsapp, StockAlertService stockAlerts,
-    StoreSettingsService storeSettings) : ControllerBase
+    StoreSettingsService storeSettings, SettlementService settlements,
+    IEmailNotificationService emailNotifications, ISmsNotificationService smsNotifications) : ControllerBase
 {
     private bool IsAdmin()
     {
-        if (User.Identity?.IsAuthenticated == true && User.IsInRole("Admin")) return true;
-        var key = configuration["Admin:AccessKey"];
-        var supplied = Request.Headers["X-Admin-Key"].ToString();
-        return !string.IsNullOrWhiteSpace(key) && CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(key));
+        return User.Identity?.IsAuthenticated == true && User.IsInRole("Admin");
     }
 
-    private IActionResult AdminRequired() => Problem("Admin authorization is required.", statusCode: 401);
+    private IActionResult AdminRequired() => Problem("Admin authorization is required. Sign in with an Admin account.", statusCode: 401);
 
     [HttpGet]
     public async Task<IActionResult> Get()
@@ -65,16 +63,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         var order = await db.Orders.AsNoTracking().Include(x => x.Items).Include(x => x.StatusHistory)
             .FirstOrDefaultAsync(x => x.OrderNumber == orderNumber);
         if (order is null) return NotFound();
-        var userId = User.Identity?.IsAuthenticated == true ? User.FindFirstValue(ClaimTypes.NameIdentifier) : null;
-        var isOwner = Guid.TryParse(userId, out var parsedUserId) && order.CustomerUserId == parsedUserId;
-        var isAdmin = User.Identity?.IsAuthenticated == true && User.IsInRole("Admin");
-        var trackingToken = Request.Headers["X-Tracking-Token"].ToString();
-        var trackingMatches = !string.IsNullOrWhiteSpace(order.TrackingTokenHash) &&
-            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(order.TrackingTokenHash),
-                Encoding.UTF8.GetBytes(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(trackingToken)))));
-        var legacyOpaqueOrderNumber = string.IsNullOrWhiteSpace(order.TrackingTokenHash) &&
-            System.Text.RegularExpressions.Regex.IsMatch(order.OrderNumber, @"^OM\d{17}[A-F0-9]{16}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!isOwner && !isAdmin && !trackingMatches && !legacyOpaqueOrderNumber) return NotFound();
+        if (!MayViewOrder(order)) return NotFound();
         return Ok(new
         {
             order.OrderNumber, order.Status, order.PaymentMethod, order.PaymentStatus,
@@ -95,14 +84,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
     {
         var order = await db.Orders.AsNoTracking().FirstOrDefaultAsync(x => x.OrderNumber == orderNumber);
         if (order is null) return NotFound();
-        var userId = User.Identity?.IsAuthenticated == true ? User.FindFirstValue(ClaimTypes.NameIdentifier) : null;
-        var isOwner = Guid.TryParse(userId, out var parsedUserId) && order.CustomerUserId == parsedUserId;
-        var isAdmin = User.Identity?.IsAuthenticated == true && User.IsInRole("Admin");
-        var trackingToken = Request.Headers["X-Tracking-Token"].ToString();
-        var trackingMatches = !string.IsNullOrWhiteSpace(order.TrackingTokenHash) &&
-            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(order.TrackingTokenHash),
-                Encoding.UTF8.GetBytes(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(trackingToken)))));
-        if (!isOwner && !isAdmin && !trackingMatches) return NotFound();
+        if (!MayViewOrder(order)) return NotFound();
         var invoice = await db.Invoices.AsNoTracking().Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.OrderId == order.Id);
         if (invoice is null) return NotFound("An invoice has not been generated for this order yet.");
@@ -219,6 +201,58 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         });
     }
 
+    /// <summary>
+    /// Printable PDF of the tax invoice. This is the endpoint InvoiceService already advertised as
+    /// DocumentReference but which did not exist, so "Download PDF" had no real target. It reuses
+    /// InvoiceService.RenderAsync and applies exactly the same authorisation rule as the JSON
+    /// invoice and the tracking view, so an invoice number alone never discloses a document.
+    /// </summary>
+    [HttpGet("{orderNumber}/invoice/pdf"), EnableRateLimiting("tracking-reads")]
+    public async Task<IActionResult> GetInvoicePdf(string orderNumber, CancellationToken cancellationToken)
+    {
+        var order = await db.Orders.AsNoTracking().FirstOrDefaultAsync(x => x.OrderNumber == orderNumber, cancellationToken);
+        if (order is null) return NotFound();
+        if (!MayViewOrder(order)) return NotFound();
+
+        var invoice = await db.Invoices.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.OrderId == order.Id, cancellationToken);
+        if (invoice is null) return NotFound("An invoice has not been generated for this order yet.");
+
+        var pdf = await invoices.RenderAsync(invoice, cancellationToken);
+        return File(pdf, "application/pdf", $"Invoice-{invoice.InvoiceNumber}.pdf", enableRangeProcessing: true);
+    }
+
+    /// <summary>
+    /// Central authorisation rule for reading one order: the tracking view, the invoice JSON and
+    /// the invoice PDF. Keeping it in one place stops the three endpoints from drifting apart, which
+    /// is what previously let a customer PII leak through a guessable URL. Access is granted to the
+    /// owning customer, an admin, or a holder of the order's tracking token. A refusal is reported as
+    /// 404 rather than 403 so the response does not confirm that an order number exists.
+    /// </summary>
+    private bool MayViewOrder(Order order)
+    {
+        var userId = User.Identity?.IsAuthenticated == true ? User.FindFirstValue(ClaimTypes.NameIdentifier) : null;
+        if (Guid.TryParse(userId, out var parsedUserId) && order.CustomerUserId == parsedUserId) return true;
+        if (User.Identity?.IsAuthenticated == true && User.IsInRole("Admin")) return true;
+
+        var supplied = Request.Headers["X-Tracking-Token"].ToString();
+        if (!string.IsNullOrWhiteSpace(order.TrackingTokenHash) && !string.IsNullOrWhiteSpace(supplied))
+        {
+            // Hash both sides first so the comparison is over two fixed-length 32-byte arrays.
+            // FixedTimeEquals throws on a length mismatch, and hashing removes that failure mode.
+            var expected = SHA256.HashData(Encoding.UTF8.GetBytes(order.TrackingTokenHash));
+            var actual = SHA256.HashData(Encoding.UTF8.GetBytes(supplied));
+            if (CryptographicOperations.FixedTimeEquals(expected, actual)) return true;
+        }
+
+        // Orders created before tracking tokens existed carry a high-entropy opaque order number, so
+        // for those rows the number itself is the unguessable capability.
+        if (string.IsNullOrWhiteSpace(order.TrackingTokenHash) &&
+            System.Text.RegularExpressions.Regex.IsMatch(order.OrderNumber, @"^OM\d{17}[A-F0-9]{16}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            return true;
+        return false;
+    }
+
     private static readonly string[] AmountWords =
     {
         "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
@@ -265,9 +299,15 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
     private static string Crore(long value) =>
         value == 1 ? "One Crore" : $"{AmountWords[(int)value]} Crore";
 
-    [HttpPost, EnableRateLimiting("order-writes")]
+    [Authorize, HttpPost, EnableRateLimiting("order-writes")]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken cancellationToken)
     {
+        // Require authenticated customer for order creation
+        if (!User.Identity?.IsAuthenticated == true)
+            return Unauthorized(new { detail = "You must be signed in to place an order." });
+        if (!User.IsInRole("Customer"))
+            return Forbid();
+
         var isCod = request.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase);
         var isUpi = request.PaymentMethod.Equals("UPI", StringComparison.OrdinalIgnoreCase) ||
                     request.PaymentMethod.Equals("Paytm UPI", StringComparison.OrdinalIgnoreCase) ||
@@ -354,7 +394,9 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             OrderNumber = "OM" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N")[..16].ToUpperInvariant(),
             CustomerName = request.CustomerName.Trim(),
             CustomerPhone = request.CustomerPhone.Trim(),
-            CustomerEmail = request.CustomerEmail.Trim(),
+            // CustomerEmail is optional, so it may be null; normalise to an empty string because
+            // Order.CustomerEmail is a non-nullable column.
+            CustomerEmail = request.CustomerEmail?.Trim() ?? "",
             BillingAddress = request.BillingAddress.Trim(),
             DeliveryAddress = destination,
             City = method.Equals("Pickup", StringComparison.OrdinalIgnoreCase) ? "" : request.City.Trim(),
@@ -453,6 +495,15 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         {
             // Logged as a failed notification attempt inside the service; nothing else to do.
         }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyOrderCreatedAsync(order.CustomerEmail, order.OrderNumber, cancellationToken);
+        await smsNotifications.NotifyOrderCreatedAsync(order.CustomerPhone, order.OrderNumber, cancellationToken);
+        var adminEmail = configuration["Admin:NotificationEmail"]?.Trim();
+        var adminPhone = configuration["Admin:NotificationPhone"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(adminEmail))
+            await emailNotifications.NotifyAdminOrderCreatedAsync(adminEmail, order.OrderNumber, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(adminPhone))
+            await smsNotifications.NotifyAdminOrderCreatedAsync(adminPhone, order.OrderNumber, cancellationToken);
         foreach (var productId in affectedProductIds.Distinct())
         {
             // Re-read after the decrement: the stock was changed with ExecuteUpdate, so the
@@ -514,9 +565,16 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             if (delivery.Status != "Pending") db.DeliveryStatusHistory.Add(new DeliveryStatusHistory { DeliveryId = delivery.Id, Status = delivery.Status, ChangedByUserId = actor });
             if (canonicalStatus == "Delivered") delivery.CompletedAt = DateTime.UtcNow;
         }
+        // Partner settlement must be created on every path that completes an order, not only the
+        // delivery-partner path, otherwise a partner-fulfilled order marked Delivered by an admin
+        // never gets a settlement row. The service is idempotent on OrderId.
+        if (canonicalStatus == "Delivered") await settlements.CreateForDeliveredOrder(order.Id);
         await db.SaveChangesAsync();
         // Admin status alert, after the change is committed and never able to undo it.
         try { await whatsapp.NotifyOrderStatusAsync(order); } catch (Exception) { /* logged as a failed attempt */ }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyOrderStatusAsync(order.CustomerEmail, order.OrderNumber, order.Status);
+        await smsNotifications.NotifyOrderStatusAsync(order.CustomerPhone, order.OrderNumber, order.Status);
         return Ok(new { order.Id, order.OrderNumber, order.Status, order.PaymentStatus });
     }
 
@@ -543,6 +601,9 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             .ExecuteUpdateAsync(x => x.SetProperty(s => s.Status, "Payable"));
         await db.SaveChangesAsync();
         try { await whatsapp.NotifyPaymentReceivedAsync(order, payment?.ProviderReference, cancellationToken); } catch (Exception) { /* logged as a failed attempt */ }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyPaymentReceivedAsync(order.CustomerEmail, order.OrderNumber, order.TotalAmount, cancellationToken);
+        await smsNotifications.NotifyPaymentReceivedAsync(order.CustomerPhone, order.OrderNumber, order.TotalAmount, cancellationToken);
         return Ok(new { order.Id, order.OrderNumber, order.PaymentStatus });
     }
 

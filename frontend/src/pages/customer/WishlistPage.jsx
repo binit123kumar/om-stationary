@@ -1,0 +1,15 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Heart } from 'lucide-react';
+import { apiFetch } from '../../session.js';
+import { ProductCard } from '../../components/products/ProductCard.jsx';
+export function WishlistPage({catalog,wishlist,add,addN,toggleWishlist,user,error='',loading=false,reload}){
+ // The wishlist is server-owned, so the page renders straight from /api/wishlist instead of
+ // filtering catalog.products. The catalogue loader is capped at one page, so deriving the saved
+ // products from it silently hid any saved item outside that first page.
+ const [rows,setRows]=useState([]),[rowLoading,setRowLoading]=useState(false),[rowError,setRowError]=useState('');
+ const loadRows=useCallback(async()=>{if(user?.role!=='Customer'){setRows([]);return}setRowLoading(true);setRowError('');try{const r=await apiFetch('/api/wishlist');if(r.status===401){setRows([]);return}if(!r.ok)throw new Error('Wishlist could not be loaded.');const data=await r.json();setRows((Array.isArray(data)?data:[]).map(x=>({id:x.productId,name:x.name,price:x.price,mrp:x.mrp,cat:x.category,img:x.imageUrl,brand:x.brand,sku:x.sku,stock:x.stock})))}catch(e){setRowError(e.message||'Wishlist could not be loaded.')}finally{setRowLoading(false)}},[user?.role]);
+ useEffect(()=>{loadRows()},[loadRows,wishlist.length]);
+ const showError=error||rowError,busy=loading||rowLoading;
+ if(user?.role==='Customer')return <><div className="pagehead"><small>SAVED PRODUCTS</small><h1>Your wishlist</h1><p>Saved to your OM Stationary account - it stays on every device you sign in from.</p></div>{showError?<div className="catalog-state error" role="alert">{showError} <button className="outline" onClick={()=>{reload?.();loadRows()}}>Retry</button></div>:busy?<div className="catalog-state">Loading saved products...</div>:rows.length?<div className="grid">{rows.map(p=><ProductCard key={p.id} p={p} add={add} addN={addN} saved toggleWishlist={toggleWishlist}/>)}</div>:<div className="empty"><Heart size={40}/><h2>Your wishlist is empty</h2><p>Tap the heart on any product to save it here.</p><Link className="btn" to="/search">Browse products</Link></div>}</>;
+ const {products,loading:catalogLoading,error:catalogError}=catalog,items=products.filter(p=>wishlist.includes(p.id));return <><div className="pagehead"><small>SAVED PRODUCTS</small><h1>Your wishlist</h1><p>You&rsquo;re browsing as a guest. Sign in to save this wishlist to your account.</p></div>{showError?<div className="catalog-state error" role="alert">{showError}</div>:busy||catalogLoading?<div className="catalog-state">Loading saved products...</div>:items.length?<div className="grid">{items.map(p=><ProductCard key={p.id} p={p} add={add} addN={addN} saved toggleWishlist={toggleWishlist}/>)}</div>:<div className="empty"><Heart size={40}/><h2>Your wishlist is empty</h2><p>Sign in and tap the heart on any product to save it here.</p><Link className="btn" to="/search">Browse products</Link></div>}</>}

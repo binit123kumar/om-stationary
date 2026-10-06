@@ -1,93 +1,184 @@
-# OM Stationary production deployment checklist
+# Production deployment and release gates
 
-This project has no hosting platform or production domain configured. This checklist records the verified build state and the values the owner must supply before a real deployment.
+**Release status: NO-GO as of 2026-10-06.** The local application and database work, but external
+payment verification, provider credentials, an Admin acceptance run, browser verification, and Docker
+validation are still outstanding. This document reflects the current source and observed local
+environment; it does not claim a production deployment.
 
-## What is already in the project
+## What was verified locally
 
-- React/Vite storefront and ASP.NET Core 10 API, backed by EF Core and SQL Server.
-- Five EF migrations: `20260929022303_InitialMvpSchema`, `20260929030714_MvpFoundation`, `20260930065632_OmStationaryDirectCommerce`, `20261003093401_AdminStoreSettingsAndAuditValues`, and `20261003110615_WhatsAppNotifications`.
-- JWT access tokens (15 minutes) and hashed, revocable refresh tokens (30 days); password hashes use ASP.NET Identity's `PasswordHasher`.
-- Admin bootstrap creates an account only when both `Admin:BootstrapEmail` and `Admin:BootstrapPassword` are set and that email does not already exist. Password is hashed.
-- Order checkout reads product/partner stock and prices from SQL. Stock decrements use conditional SQL updates inside the order transaction, so competing orders cannot reduce stock below zero.
-- API checks the configured delivery city and PIN, requires customer coordinates, and selects stock from eligible shops within `Delivery:MaxRadiusKm`.
-- COD is implemented. Paytm QR/status integration is present but disabled in the checked-in configuration.
+- Frontend `npm install` and `npm run build` succeed. The build has four upstream `use client`
+  directive warnings from React Router and Lucide. Admin charts are lazy-loaded; neither emitted JS
+  chunk exceeds 500 KB.
+- API Debug and Release builds succeed with zero compiler warnings.
+- Backend unit tests: 14 passed, 0 failed, 0 skipped (order state transitions, notification
+  normalization, SMTP/Twilio behavior).
+- SQL Server `BINIT` connected to `OMStationaryDb`; `/api/health` returned API/database healthy.
+- All five repository migrations are present in `__EFMigrationsHistory`; no migration was pending.
+- API customer smoke checks covered registration/login, refresh rotation/revocation/logout, role
+  separation, cart, wishlist, UPI initiation, invoice ownership, and order history. Disposable test
+  data was removed and stock restored. The payment status response was fixed and retested.
+- Docker CLI/engine and a browser session are unavailable here. Container build, Compose validation,
+  browser console, mobile layout, CORS in a real browser, and full Admin/Partner/Delivery acceptance
+  are not verified.
 
-## Build and migration verification (2026-10-04)
+## Production configuration
 
-- Frontend `npm run build`: **PASS**. Vite emitted dependency warnings about module-level `use client` directives.
-- Backend `dotnet clean` and `dotnet build --configuration Release`: **PASS**, 0 errors and 4 nullable warnings in `Controllers/WishlistController.cs`.
-- `dotnet ef migrations list --configuration Release`: found five migrations (including store settings/audit and WhatsApp notifications). SQL Server at `localhost\SQLEXPRESS` was unreachable, so applied/pending status is **unknown**. EF tool 8.0.30 is older than runtime 10.0.0.
-- Git branch is `feature/customer-flow`. There were pre-existing local edits and backup files when this inspection began; they have been preserved.
-- No order/auth/delivery/admin E2E flow or live database migration was run. Do not treat those flows as verified.
-- Secret scan found a committed, fixed development bootstrap admin credential. It has been removed from `appsettings.Development.json`; configure local bootstrap credentials through environment variables if needed.
-
-## Required production configuration
-
-Set these as deployment secrets or environment variables, never in frontend source or committed settings:
+Store secrets in the deployment platform's secret manager. Do not commit `.env` files, signing keys,
+database credentials, provider tokens, or bootstrap passwords. Compose needs:
 
 ```text
-ASPNETCORE_ENVIRONMENT=Production
-ConnectionStrings__DefaultConnection=<production SQL Server connection string>
-Jwt__SigningKey=<random secret, at least 32 UTF-8 bytes>
-Jwt__Issuer=<chosen stable issuer>
-Jwt__Audience=<chosen stable audience>
-Cors__AllowedOrigins__0=https://<actual-storefront-hostname>
-Admin__BootstrapEmail=<owner-controlled admin email>
-Admin__BootstrapPassword=<unique strong one-time bootstrap password>
-Admin__BootstrapPhone=<verified admin phone>
-Shop__RegistrationKey=<random key, only if the partner registration flow uses it>
-VITE_API_URL=https://<actual-api-hostname>
+MSSQL_SA_PASSWORD=<unique SQL Server SA password>
+OM_JWT_SIGNING_KEY=<random secret, at least 32 UTF-8 bytes>
+OM_STORE_ORIGIN=https://<exact-storefront-origin-without-path>
+TLS_CERT_DIR=<host directory containing fullchain.pem and privkey.pem>
 ```
 
-The actual domain names and SQL host are intentionally not invented. For more than one storefront origin, provide the indexed `Cors__AllowedOrigins__1`, etc. Production API startup now rejects missing, non-HTTPS, or loopback CORS origins. Development localhost origins remain in `appsettings.Development.json`.
+`docker.env.example` lists optional integration values. Copy it to an ignored `.env` for local Compose
+use and fill all required values. For production, inject secrets through a secret manager rather than
+relying on a developer `.env` file. The application checks signing-key length and requires an exact
+HTTPS CORS origin outside Development; the owner must supply a high-entropy key.
 
-The repository's current base SQL setting is `localhost\\SQLEXPRESS;Database=OMStationaryDb` with Windows integrated authentication. This is a local development setting, not a production connection string. On the inspected workstation, the `MSSQLSERVER` Windows service was running, but the configured `SQLEXPRESS` connection failed. Supply and verify the intended SQL instance and database before deployment.
+An Admin can be bootstrapped once with `OM_ADMIN_EMAIL`, `OM_ADMIN_PASSWORD`, and `OM_ADMIN_PHONE`.
+`Admin__BootstrapOverwritePassword` is false. After the account is created, remove the bootstrap
+password from the deployment environment. Admin notification destinations are separate optional
+values: `OM_ADMIN_NOTIFICATION_EMAIL` and `OM_ADMIN_NOTIFICATION_PHONE`.
 
-The bootstrap admin is created only once. Store the bootstrap password securely, sign in after first startup, then remove `Admin__BootstrapPassword` from the deployment environment. If the admin already exists, changing bootstrap settings will not reset its password. No bootstrap credentials are committed in development settings.
+Compose keeps SQL Server and the API private to its network. Nginx redirects HTTP to HTTPS, serves
+the SPA, and proxies `/api` to the API. Provide a valid TLS certificate directory before starting
+the frontend. The Compose SQL connection currently trusts the SQL Server container certificate;
+configure and validate a trusted SQL certificate and disable `TrustServerCertificate` before using
+an external production SQL Server.
 
-## Store and delivery values to confirm
+The Compose defaults explicitly disable UPI, delivery, WhatsApp, email, and SMS. Confirm the business
+address, tax/billing identifiers, catalogue, inventory, delivery areas, charges, and provider settings
+before enabling those features. Development sample products are not seeded in Production. The
+checked-in local `appsettings.json` includes store/payment
+configuration values; Compose overrides UPI to disabled/blank and pickup address to blank until the
+operator supplies deployment values.
 
-The settings currently contain an OM Stationary address and coordinates in Sohgi/Sampatchak, Patna, hours of 9 AM–9 PM, delivery radius 20 km, configured Patna PIN codes, and a ₹40 delivery charge. These are existing project values and have **not** been confirmed by the owner for production. `Billing:Phone`, `Billing:Email`, `OmStationary:Phone`, and `OmStationary:Email` are blank. Verify/replace these values and verify the serviceable PIN list and charge before enabling delivery.
+## Payments
 
-Other current values: tax rate is 0%; settlement commission is unset. Confirm applicable billing/tax settings and whether there is a minimum order value (none was found in configuration). Catalog data is seeded with sample products only when the database is empty; replace/verify catalog, prices, photos, and inventory before opening the shop.
+The local API reports UPI initiation configured. It creates an exact-amount `upi://pay` intent and
+keeps the order pending. The application does **not** verify payment through a signed webhook,
+provider status API, or callback. The customer UI cannot confirm payment. Automated online refunds
+are also not implemented.
 
-## Database, migrations, and recovery
+Required release work:
 
-1. Provision a production SQL Server database and a dedicated application login. Because the application currently applies migrations on startup, that login needs schema migration rights as well as normal application CRUD rights. Prefer a deployment-only migration identity with DDL rights and adjust startup migration behavior before using a narrower runtime identity.
-2. Back up the database before the first migration and before catalog/order data imports. The project does not configure or verify backups. Configure automated encrypted backups and retention in the SQL hosting platform; a reasonable initial owner-reviewed policy is daily backups with point-in-time recovery if available.
-3. Restore to a separate database periodically and document the recovery point. Migrations are forward-applied; rollback requires restoring a backup or a reviewed compensating migration. Do not delete migration history or guess at a production schema baseline.
-4. Deploy to a staging database first. Run `dotnet ef migrations list` with the staging connection and apply/inspect migrations there. The API's startup migration behavior will apply them when it can connect.
-5. After deployment, verify `GET /api/health` returns API and database healthy, then verify catalog reads and authorized admin access against staging before customer traffic.
+1. Select a payment provider and configure its real production credentials in secret storage.
+2. Implement and test provider signature verification and idempotent callback/status handling.
+3. Match provider transaction reference, currency, amount, and order before marking Paid.
+4. Implement the provider refund path and failure/reconciliation handling, or keep online payment
+   disabled and use COD only.
+5. Run provider sandbox and real low-value acceptance tests without using production customer data.
 
-## Remaining release gates
+Until those gates pass, report **PAYMENT INITIATION = PASS**, **PAYMENT VERIFICATION = NOT
+IMPLEMENTED**, **PAYMENT E2E = BLOCKED** for the current local UPI configuration. For a deployment
+without UPI configuration, initiation is also blocked.
 
-- Choose hosting provider, frontend/API hostnames, SQL Server host/database, HTTPS certificates, and secret storage.
-- Verify store contact/address, product catalog/stock/prices, delivery PIN codes/radius/charge, tax settings, and admin account.
-- Set the required environment above. Keep `Payments__Enabled=false` until real Paytm credentials and a sandbox end-to-end payment verification are available. COD remains the configured payment path.
-- Run staging checks for migrations, registration/login/refresh/logout, unauthorized/admin authorization, pickup COD, delivery quote and order, stock concurrency, invoice ownership, notifications, and admin status transitions.
-- Configure database backup/restore and platform monitoring. No DNS or backup is configured by this repository.
-- Rebuild the frontend with the actual `VITE_API_URL`; validate HTTPS API calls and CORS preflight from the deployed storefront origin.
+## WhatsApp, email, and SMS
 
-## Exact build and publish commands
+- **WhatsApp:** Current provider value is the placeholder `Your API`; it is disabled and credentials
+  are blank. The UI/settings/log/retry API exists, but actual sending is not verified. Configure a
+  WhatsApp Business Cloud API app, phone-number ID, access token, recipient, and approved templates;
+  then send a controlled test message and verify the provider result.
+- **Email:** SMTP delivery code is connected to order creation/status/payment events for customers
+  and new-order alerts for a configured admin recipient. SMTP host, credentials, and sender are blank
+  and disabled in the checked-in config. Configure a real SMTP service, test accepted and rejected
+  sends, then verify inbox delivery and bounce handling.
+- **SMS:** Twilio REST send code is connected to the same customer order events and configured admin
+  new-order alerts. Credentials and sender are blank and the service is disabled. Twilio acceptance
+  is not proof of handset delivery; delivery callbacks/status reconciliation remain to be added.
 
-Run from the repository root after setting the production API URL for the frontend build:
+Do not enable an integration until its recipient, sender, event toggles, credentials, provider-side
+template/consent requirements, failure alerts, and retention policy are reviewed.
+
+## Authentication and security
+
+- JWT HS256 checks signature, issuer, audience, expiry, active user, and current role. Refresh tokens
+  are hashed at rest and rotate on refresh; logout revokes them.
+- Admin APIs enforce the Admin role. A Customer token was verified to receive 403 on Admin,
+  Partner, and DeliveryPartner role-protected surfaces.
+- Order/invoice reads require owner, Admin, or a tracking token. An anonymous order read was denied.
+- CORS has exact-origin configuration; Production refuses loopback/non-HTTPS origins.
+- Rate limits cover auth/order writes and tracking reads.
+- Do not expose Swagger outside Development. Use HTTPS at the reverse proxy and keep SQL/API
+  services private. Configure backups, restore tests, monitoring, log retention, and secret rotation.
+
+**Not implemented:** Google login/token verification, forgot-password/reset-password endpoints and
+reset-token storage, provider-verified online payments, and automated gateway refunds. The current
+database has no `PasswordResetTokens` table.
+
+## Database migration and recovery
+
+The local `OMStationaryDb` has these five migrations applied:
+
+1. `20260929022303_InitialMvpSchema`
+2. `20260929030714_MvpFoundation`
+3. `20260930065632_OmStationaryDirectCommerce`
+4. `20261003093401_AdminStoreSettingsAndAuditValues`
+5. `20261003110615_WhatsAppNotifications`
+
+The API uses a safe migration bootstrap for recognized schemas. Before production:
+
+1. Provision a separate production database and least-privilege application identity.
+2. Take an encrypted backup and verify a restore to a separate database.
+3. Run `dotnet ef migrations list` against staging, review the generated SQL, and apply there first.
+4. Run health, catalogue, customer, Admin, Partner, Delivery, invoice, and notification checks on
+   staging before production traffic.
+5. Keep a tested restore/rollback plan. Never drop or reset an existing production-like database to
+   make a migration pass.
+
+## Docker commands
+
+Docker was not installed in the current environment, so these commands remain unverified here:
 
 ```powershell
-$env:VITE_API_URL = 'https://<actual-api-hostname>'
-Push-Location .\frontend
-npm ci
-npm run build
-Pop-Location
-
-Push-Location .\backend\OMStationary.Api
-dotnet clean
-dotnet build --configuration Release
-dotnet publish --configuration Release --output ..\..\publish\api
-Pop-Location
+docker compose config
+docker compose build
+docker compose up -d
+docker compose ps
 ```
 
-Publish `frontend/dist` to the selected static web host and `backend/publish/api` to the selected ASP.NET host. Configure SPA fallback to `index.html` and serve both hosts only over HTTPS. These commands build/publish artifacts; they do not deploy them.
+Before running them, fill required values in the deployment environment and provide TLS certificates.
+The Dockerfile uses an explicit API source path, publishes the API, builds the SPA with an empty
+same-origin API base, and excludes local secrets, build output, backups, and smoke-test artifacts
+through `.dockerignore`.
 
-## Current release decision
+## Go-live checklist
 
-**Status: CODE READY — PRODUCTION CONFIGURATION REQUIRED. NO-GO for production today.** Frontend and backend release builds pass. Production host/domain, production SQL Server, secrets, HTTPS/CORS origins, backup/restore, live database migration state, and customer/admin E2E remain unverified. COD is implemented in code; online payment is disabled unless Paytm credentials and verification are configured. WhatsApp is explicitly disabled until Business Cloud API credentials are supplied. Do not claim a successful production deployment until staging and release gates above pass.
+| Gate | Status | Evidence / remaining work |
+|---|---|---|
+| Frontend production build | PASS | Vite build succeeds; four upstream directive warnings remain |
+| API Debug/Release builds | PASS | Both succeed with zero warnings |
+| Backend unit tests | PASS | Current suite passes; includes state machine and notification tests |
+| SQL Server and migrations | PASS | Local `OMStationaryDb` healthy; all five migrations applied |
+| Customer auth/cart/order smoke checks | PASS | Local API flows passed; test data was cleaned up |
+| Admin acceptance with a real Admin account | BLOCKED | No Admin credentials/account available for an end-to-end sign-in run |
+| Partner and delivery acceptance | BLOCKED | Requires role-specific accounts and assigned delivery data |
+| Online payment initiation | PASS (local) | Exact-amount UPI deep link generated |
+| Online payment verification/refunds | FAIL / NOT IMPLEMENTED | No verified callback/webhook or provider refund path |
+| Google login | FAIL / NOT IMPLEMENTED | No route, client ID, or backend token validation |
+| Password reset | FAIL / NOT IMPLEMENTED | No endpoints or reset-token table |
+| WhatsApp actual send | BLOCKED | Placeholder provider and no credentials |
+| SMTP/SMS actual delivery | BLOCKED | Providers disabled and credentials absent |
+| Desktop/mobile browser console | BLOCKED | No browser session available in the environment |
+| Docker build and Compose validation | BLOCKED | Docker CLI/engine unavailable |
+| Domain, TLS, monitoring, backups, owner business data | BLOCKED | Must be supplied and verified by the operator |
+
+## Final release decision
+
+**GO-LIVE: NO.** The required top blockers are:
+
+- **P0 — Payment:** UPI initiation is not payment verification; signed callbacks/status verification
+  and online refunds are not implemented. Keep UPI disabled for production until completed.
+- **P0 — Deployment/security configuration:** Supply production SQL credentials, a high-entropy JWT
+  key, exact HTTPS origin, verified TLS certificates, owner-approved business settings, backups,
+  and monitoring. The Compose stack has not been built or run here.
+- **P1 — External services:** Configure and verify WhatsApp, SMTP, and Twilio accounts, then prove
+  accepted and delivered/failed outcomes with controlled test recipients.
+- **P1 — Acceptance testing:** Run desktop/mobile browser checks and complete Admin, Partner, and
+  DeliveryPartner workflows using least-privilege staging accounts.
+- **P2 — Account recovery/social auth:** Implement and test secure password reset and Google login
+  if they are required for launch.

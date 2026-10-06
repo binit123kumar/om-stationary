@@ -80,7 +80,7 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
     {
         var order = await db.Orders.FirstOrDefaultAsync(x => x.OrderNumber == orderNumber, cancellationToken);
         if (order is null || !CanAccess(order)) return NotFound();
-        return Ok(new { status = order.PaymentStatus, order.Status, order.PaymentStatus, verified = false,
+        return Ok(new { status = order.PaymentStatus, orderStatus = order.Status, paymentStatus = order.PaymentStatus, verified = false,
             detail = "UPI payment verification is not available yet. Payment remains pending." });
     }
 
