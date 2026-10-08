@@ -14,3 +14,9 @@ build/
 *.bak-*
 *.bak[0-9]*
 *.before-*
+
+# Local smoke-test outputs may contain bearer tokens or customer test data.
+/_tok.txt
+/_em.txt
+/_order.txt
+/_smoke.*

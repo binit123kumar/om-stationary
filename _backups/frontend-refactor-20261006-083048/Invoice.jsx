@@ -7,9 +7,11 @@ import { apiFetch } from './session.js';
 
 const rupees = (value) => '\u20b9' + Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const PAYMENT_LABEL = { 'Paytm UPI': 'Online Payment (UPI)', COD: 'Pay on Shop (COD)' };
-
-function paymentLabel(method) { return PAYMENT_LABEL[method] || method || 'Not recorded'; }
+function paymentLabel(method) {
+  if (/upi/i.test(String(method || ''))) return 'Online Payment (UPI)';
+  if (String(method || '').toUpperCase() === 'COD') return 'Pay on Shop (COD)';
+  return method || 'Not recorded';
+}
 
 /**
  * A4 tax invoice rendered entirely from `GET /api/orders/{orderNumber}/invoice`.

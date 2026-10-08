@@ -16,15 +16,3 @@ export function ProtectedRoute({ children, roles = null }) {
   return children;
 }
 
-// Admin screens keep the in-page sign-in panel from the original
-// implementation: a customer without the admin key sees the
-// panel instead of a hard redirect.
-export function AdminRoute({ children, adminSignedIn, fallback }) {
-  if (adminSignedIn) return children;
-  return fallback || null;
-}
-
-export function RoleRoute({ children, role, user, fallback = null }) {
-  if (user?.role === role) return children;
-  return fallback;
-}

@@ -69,6 +69,15 @@ export async function assignDelivery(id, partner, trackingCode = '', headers) {
   });
 }
 
+// Assign using a real delivery partner ID from the administration API.
+export async function assignDeliveryPartner(orderId, deliveryPartnerId, trackingCode = '', headers) {
+  return apiFetch(`/api/orders/${encodeURIComponent(orderId)}/delivery`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ deliveryPartnerId: Number(deliveryPartnerId), trackingCode })
+  });
+}
+
 // ---- Catalogue ------------------------------------------------------------
 export async function listAdminProducts(headers, params = {}) {
   const query = new URLSearchParams({ page: '1', pageSize: String(ADMIN_PAGE_SIZE), ...params });
@@ -100,7 +109,8 @@ export async function adjustStock(id, delta, reason = '', headers) {
 // ---- Categories -----------------------------------------------------------
 export async function listAdminCategories(headers) {
   const response = await apiFetch('/api/admin/categories', { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load categories.');
+  return response.json();
 }
 
 export async function createCategory(name, isActive, headers) {
@@ -118,7 +128,12 @@ export async function updateCategory(id, name, isActive, headers) {
 // ---- Coupons --------------------------------------------------------------
 export async function listAdminCoupons(headers) {
   const response = await apiFetch('/api/admin/coupons', { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load coupons.');
+  return response.json();
+}
+
+export async function createCoupon(coupon, headers) {
+  return apiFetch('/api/coupons', { method: 'POST', headers, body: JSON.stringify(coupon) });
 }
 
 export async function updateCoupon(id, coupon, headers) {
@@ -129,24 +144,28 @@ export async function updateCoupon(id, coupon, headers) {
 export async function listAdminCustomers(headers, params = {}) {
   const query = new URLSearchParams(params);
   const response = await apiFetch('/api/admin/customers?' + query.toString(), { headers });
-  return response.ok ? response.json() : { total: 0, items: [] };
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load customers.');
+  return response.json();
 }
 
 export async function listAdminPayments(headers, params = {}) {
   const query = new URLSearchParams(params);
   const response = await apiFetch('/api/admin/payments?' + query.toString(), { headers });
-  return response.ok ? response.json() : { total: 0, items: [] };
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load payments.');
+  return response.json();
 }
 
 export async function listAdminInvoices(headers, params = {}) {
   const query = new URLSearchParams(params);
   const response = await apiFetch('/api/admin/invoices?' + query.toString(), { headers });
-  return response.ok ? response.json() : { total: 0, items: [] };
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load invoices.');
+  return response.json();
 }
 
 export async function getAdminNotifications(headers) {
   const response = await apiFetch('/api/admin/notifications', { headers });
-  return response.ok ? response.json() : null;
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load admin notifications.');
+  return response.json();
 }
 
 export async function getAdminWishlistStats(headers) {
@@ -156,7 +175,8 @@ export async function getAdminWishlistStats(headers) {
 
 export async function getAuditLog(headers, take = 100) {
   const response = await apiFetch(`/api/admin/audit-log?take=${take}`, { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load the audit log.');
+  return response.json();
 }
 
 // ---- Reports --------------------------------------------------------------
@@ -178,7 +198,8 @@ export async function exportReport(headers, report, from, to) {
 // ---- Settings -------------------------------------------------------------
 export async function getAdminSettings(headers) {
   const response = await apiFetch('/api/admin/settings', { headers });
-  return response.ok ? response.json() : null;
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load store settings.');
+  return response.json();
 }
 
 export async function saveAdminSettings(settings, headers) {
@@ -188,7 +209,8 @@ export async function saveAdminSettings(settings, headers) {
 // ---- Partner shops (admin view) -------------------------------------------
 export async function listPartnerShops(headers) {
   const response = await apiFetch('/api/partner/shops', { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load partner shops.');
+  return response.json();
 }
 
 export async function setPartnerShopApproval(id, approved, headers) {
@@ -202,7 +224,8 @@ export async function setPartnerShopApproval(id, approved, headers) {
 // ---- Delivery management (admin view) -------------------------------------
 export async function listDeliveryPartners(headers) {
   const response = await apiFetch('/api/delivery/management/partners', { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load delivery partners.');
+  return response.json();
 }
 
 export async function createDeliveryPartner(partner, headers) {
@@ -211,7 +234,8 @@ export async function createDeliveryPartner(partner, headers) {
 
 export async function listAllAssignments(headers) {
   const response = await apiFetch('/api/delivery/management/assignments', { headers });
-  return response.ok ? response.json() : [];
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Could not load delivery assignments.');
+  return response.json();
 }
 
 // ---- Admin order detail ---------------------------------------------------

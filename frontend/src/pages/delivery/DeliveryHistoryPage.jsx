@@ -1,0 +1,4 @@
+import { Link } from 'react-router-dom';
+import { useDeliveryAssignments } from '../../hooks/useDelivery.js';
+
+export function DeliveryHistoryPage() { const {assignments,error}=useDeliveryAssignments(); const rows=assignments.filter(d=>['Delivered','Failed','Cancelled'].includes(d.status)); return <section className="account-page"><div className="pagehead"><small>DELIVERY PARTNER</small><h1>Delivery history</h1><Link className="outline" to="/delivery">Dashboard</Link></div>{error&&<p role="alert" className="form-error">{error}</p>}{rows.map(d=><article className="panel" key={d.id}><h2>{d.orderNumber} · {d.status}</h2><p>{d.dropAddress}</p><p>Tracking: {d.trackingCode||'—'}</p></article>)}{!rows.length&&!error&&<p>No completed or closed assignments are returned by the delivery service.</p>}</section>; }

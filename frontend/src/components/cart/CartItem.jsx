@@ -32,7 +32,7 @@ export function CartItem({ item, onChange, onRemove }) {
       <div className="cartitem-end">
         <strong>&#8377;{formatNumber(Number(item.price) * item.q)}</strong>
         <small>&#8377;{formatNumber(item.price)} each</small>
-        <button type="button" className="cart-remove" onClick={() => onRemove(item.id)}>
+        <button type="button" className="cart-remove" aria-label={`Remove ${item.name} from cart`} onClick={() => onRemove(item.id)}>
           Remove
         </button>
       </div>

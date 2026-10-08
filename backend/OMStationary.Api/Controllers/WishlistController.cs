@@ -31,12 +31,12 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
         // nullable CurrentUserId property is not dereferenced inside the query expression.
         var userId = id.Value;
         var rows = await db.WishlistItems.AsNoTracking()
-            .Where(x => x.Wishlist.UserId == userId && x.Product.IsActive)
+            .Where(x => x.Wishlist!.UserId == userId && x.Product!.IsActive)
             .OrderByDescending(x => x.AddedAt)
             .Select(x => new
             {
                 x.ProductId,
-                x.Product.Name,
+                Name = x.Product!.Name,
                 x.Product.Slug,
                 x.Product.Brand,
                 x.Product.Category,
@@ -72,7 +72,7 @@ public sealed class WishlistController(OmDbContext db) : ControllerBase
         if (id is null) return Unauthorized();
         var userId = id.Value;
         var removed = await db.WishlistItems
-            .Where(x => x.Wishlist.UserId == userId && x.ProductId == productId)
+            .Where(x => x.Wishlist!.UserId == userId && x.ProductId == productId)
             .ExecuteDeleteAsync();
         return removed == 0 ? NotFound() : NoContent();
     }

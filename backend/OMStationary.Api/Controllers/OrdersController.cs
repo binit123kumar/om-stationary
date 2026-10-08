@@ -15,9 +15,10 @@ namespace OMStationary.Api.Controllers;
 [ApiController]
 [Route("api/orders")]
 public class OrdersController(OmDbContext db, IConfiguration configuration, FulfillmentSelectionService fulfillment,
-    ICodPaymentProvider codPayments, CouponService coupons, IPaymentGateway gateway, InvoiceService invoices,
+    ICodPaymentProvider codPayments, CouponService coupons, InvoiceService invoices,
     NotificationService notifications, IWhatsAppNotificationService whatsapp, StockAlertService stockAlerts,
-    SettlementService settlements) : ControllerBase
+    StoreSettingsService storeSettings, SettlementService settlements,
+    IEmailNotificationService emailNotifications, ISmsNotificationService smsNotifications) : ControllerBase
 {
     private bool IsAdmin()
     {
@@ -79,12 +80,11 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
     // The invoice is visible to exactly the same people who may track the order: the owning
     // customer, an admin, or anyone holding the order's tracking token.
     [HttpGet("{orderNumber}/invoice"), EnableRateLimiting("tracking-reads")]
-    public async Task<IActionResult> GetInvoice(string orderNumber)
+    public async Task<IActionResult> GetInvoice(string orderNumber, CancellationToken cancellationToken)
     {
         var order = await db.Orders.AsNoTracking().FirstOrDefaultAsync(x => x.OrderNumber == orderNumber);
         if (order is null) return NotFound();
         if (!MayViewOrder(order)) return NotFound();
-
         var invoice = await db.Invoices.AsNoTracking().Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.OrderId == order.Id);
         if (invoice is null) return NotFound("An invoice has not been generated for this order yet.");
@@ -107,7 +107,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         var plusCode = Configured(configuration["Billing:PlusCode"]);
 
         // GST is configurable, so the rate is sent with the invoice rather than assumed by the UI.
-        var taxRate = configuration.GetValue<decimal>("Tax:RatePercent");
+        var taxRate = await storeSettings.GetTaxRatePercentAsync(cancellationToken);
         var payment = await db.Payments.AsNoTracking()
             .Where(x => x.OrderId == order.Id)
             .OrderByDescending(x => x.Id)
@@ -191,9 +191,12 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
                 provider = payment?.Provider ?? "",
                 providerStatus = payment?.Status ?? "",
                 // Only ever a reference the gateway actually returned. Never synthesised.
-                transactionId = payment?.ProviderReference ?? "",
+                transactionId = string.Equals(payment?.Status, "Paid", StringComparison.OrdinalIgnoreCase)
+                    ? payment?.ProviderReference ?? "" : "",
                 paidAt = payment?.PaidAt,
-                isCod = invoice.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase)
+                isCod = invoice.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase),
+                upiVpa = invoice.PaymentMethod.Equals("UPI", StringComparison.OrdinalIgnoreCase)
+                    ? configuration["Payments:Upi:Vpa"] ?? "" : ""
             }
         });
     }
@@ -309,8 +312,11 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         var isUpi = request.PaymentMethod.Equals("UPI", StringComparison.OrdinalIgnoreCase) ||
                     request.PaymentMethod.Equals("Paytm UPI", StringComparison.OrdinalIgnoreCase) ||
                     request.PaymentMethod.Equals("Online", StringComparison.OrdinalIgnoreCase);
-        if (!isCod && !isUpi) return BadRequest("Choose Cash on Delivery or Paytm UPI.");
-        if (isUpi && !gateway.IsConfigured) return Problem("Paytm UPI is not configured for this store yet. Choose Cash on Delivery.", statusCode: 503);
+        if (!isCod && !isUpi) return BadRequest("Choose Cash on Delivery or UPI payment.");
+        var upiVpa = configuration["Payments:Upi:Vpa"]?.Trim() ?? "";
+        if (isUpi && (!configuration.GetValue<bool>("Payments:Enabled") ||
+            !string.Equals(configuration["Payments:Provider"], "UPI", StringComparison.OrdinalIgnoreCase) || upiVpa.Length == 0))
+            return Problem("UPI payment initiation is not configured. Choose Pay on Shop.", statusCode: 503);
 
         var method = request.FulfillmentMethod.Trim();
         if (!method.Equals("Pickup", StringComparison.OrdinalIgnoreCase) &&
@@ -397,7 +403,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             Pincode = method.Equals("Pickup", StringComparison.OrdinalIgnoreCase) ? "" : request.Pincode.Trim(),
             RequestedDeliveryDate = request.RequestedPickupDate,
             DeliveryCharge = deliveryCharge,
-            PaymentMethod = isCod ? "COD" : "Paytm UPI",
+            PaymentMethod = isCod ? "COD" : "UPI",
             PaymentStatus = "Pending",
             Status = isCod ? (method.Equals("Pickup", StringComparison.OrdinalIgnoreCase) ? "Placed" : "Pending") : "Pending",
             SourceType = method.Equals("Pickup", StringComparison.OrdinalIgnoreCase) ? "OMStationaryPickup" : "OMStationaryDelivery",
@@ -419,7 +425,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         if (coupon is { Valid: false }) return BadRequest(new { detail = coupon.Reason });
         order.CouponCode = coupon?.Code ?? "";
         order.DiscountAmount = coupon?.Discount ?? 0;
-        var taxPercent = configuration.GetValue<decimal>("Tax:RatePercent");
+        var taxPercent = await storeSettings.GetTaxRatePercentAsync(cancellationToken);
         order.TaxAmount = TaxCalculator.Calculate(order.Subtotal - order.DiscountAmount, taxPercent);
         order.TotalAmount = order.Subtotal + order.DeliveryCharge - order.DiscountAmount + order.TaxAmount;
         if (request.QuotedTotal is not null && request.QuotedTotal.Value != order.TotalAmount)
@@ -437,7 +443,7 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         await db.SaveChangesAsync();
         notifications.AddForOrder(order, order.Status);
         db.Payments.Add(isCod ? codPayments.CreatePendingPayment(order.Id, order.TotalAmount) :
-            new Payment { OrderId = order.Id, Provider = "Paytm", Status = "Pending", Amount = order.TotalAmount, CreatedAt = DateTime.UtcNow });
+            new Payment { OrderId = order.Id, Provider = "UPI", Status = "Pending", Amount = order.TotalAmount, CreatedAt = DateTime.UtcNow });
         await invoices.CreateOnceAsync(order, cancellationToken);
         // Decrement the inventory the order is actually fulfilled from: OM Stationary's own product
         // stock (pickup orders and first-party delivery), or the supplying partner shop's stock.
@@ -477,33 +483,6 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
         GatewayPaymentIntent? paymentIntent = null;
-        if (isUpi)
-        {
-            try
-            {
-                paymentIntent = await gateway.CreateOrder(order.TotalAmount, order.OrderNumber, cancellationToken);
-                if (paymentIntent.Configured)
-                {
-                    var payment = await db.Payments.FirstAsync(x => x.OrderId == order.Id && x.Provider == "Paytm", cancellationToken);
-                    payment.ProviderReference = paymentIntent.ProviderOrderId;
-                    payment.QrData = paymentIntent.QrData;
-                    payment.QrImageBase64 = paymentIntent.QrImageBase64;
-                    await db.SaveChangesAsync(cancellationToken);
-                }
-            }
-            catch (HttpRequestException)
-            {
-                paymentIntent = new(false, "Paytm", null, null, "ProviderError", "Payment QR could not be created. You can retry from the order page.");
-            }
-            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                paymentIntent = new(false, "Paytm", null, null, "ProviderTimeout", "Paytm did not respond in time. You can retry from the order page.");
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                paymentIntent = new(false, "Paytm", null, null, "ProviderError", "Paytm returned an unreadable response. You can retry from the order page.");
-            }
-        }
 
         // ---- WhatsApp admin alerts -------------------------------------------------------
         // Deliberately after CommitAsync: the order is already durable, so nothing here can fail
@@ -516,6 +495,15 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         {
             // Logged as a failed notification attempt inside the service; nothing else to do.
         }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyOrderCreatedAsync(order.CustomerEmail, order.OrderNumber, cancellationToken);
+        await smsNotifications.NotifyOrderCreatedAsync(order.CustomerPhone, order.OrderNumber, cancellationToken);
+        var adminEmail = configuration["Admin:NotificationEmail"]?.Trim();
+        var adminPhone = configuration["Admin:NotificationPhone"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(adminEmail))
+            await emailNotifications.NotifyAdminOrderCreatedAsync(adminEmail, order.OrderNumber, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(adminPhone))
+            await smsNotifications.NotifyAdminOrderCreatedAsync(adminPhone, order.OrderNumber, cancellationToken);
         foreach (var productId in affectedProductIds.Distinct())
         {
             // Re-read after the decrement: the stock was changed with ExecuteUpdate, so the
@@ -584,6 +572,9 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
         await db.SaveChangesAsync();
         // Admin status alert, after the change is committed and never able to undo it.
         try { await whatsapp.NotifyOrderStatusAsync(order); } catch (Exception) { /* logged as a failed attempt */ }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyOrderStatusAsync(order.CustomerEmail, order.OrderNumber, order.Status);
+        await smsNotifications.NotifyOrderStatusAsync(order.CustomerPhone, order.OrderNumber, order.Status);
         return Ok(new { order.Id, order.OrderNumber, order.Status, order.PaymentStatus });
     }
 
@@ -610,6 +601,9 @@ public class OrdersController(OmDbContext db, IConfiguration configuration, Fulf
             .ExecuteUpdateAsync(x => x.SetProperty(s => s.Status, "Payable"));
         await db.SaveChangesAsync();
         try { await whatsapp.NotifyPaymentReceivedAsync(order, payment?.ProviderReference, cancellationToken); } catch (Exception) { /* logged as a failed attempt */ }
+        if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
+            await emailNotifications.NotifyPaymentReceivedAsync(order.CustomerEmail, order.OrderNumber, order.TotalAmount, cancellationToken);
+        await smsNotifications.NotifyPaymentReceivedAsync(order.CustomerPhone, order.OrderNumber, order.TotalAmount, cancellationToken);
         return Ok(new { order.Id, order.OrderNumber, order.PaymentStatus });
     }
 

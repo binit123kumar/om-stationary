@@ -1,0 +1,1 @@
+export const OM_CONTACT={name:'OM Stationary',address:'G5JF+784, Ambedkar Rd, Sohgi, Bihar 800007',landmark:'Opp. Shravani Enclave, Sampatchak, Patna, Bihar',plusCode:'G5JF+784',maps:'https://www.google.com/maps/dir/?api=1&destination=25.5305282,85.173357'};

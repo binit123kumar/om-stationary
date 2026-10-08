@@ -128,6 +128,12 @@ public sealed class StoreSettingsService(OmDbContext db, IConfiguration configur
         };
     }
 
+    public async Task<decimal> GetTaxRatePercentAsync(CancellationToken cancellationToken = default)
+    {
+        var row = await db.StoreSettings.AsNoTracking().OrderBy(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+        return row?.TaxRatePercent ?? configuration.GetValue<decimal>("Tax:RatePercent");
+    }
+
     /// <summary>True only when the gateway has a provider plus every credential it needs.</summary>
     public bool gatewayConfigured()
     {

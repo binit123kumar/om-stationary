@@ -1,0 +1,380 @@
+import React,{useEffect,useState,useCallback} from 'react';
+import {createRoot} from 'react-dom/client';
+import {BrowserRouter,useNavigate,useParams,useLocation,Routes,Route,Link} from 'react-router-dom';
+import {Search,ShoppingCart,User,MapPin,Truck,Clock,ChevronRight,Plus,Minus,ArrowLeft,PackageCheck,ShieldCheck,Phone,Mail,Navigation,MessageCircle,Heart,Bell,Settings,CheckCircle2,CreditCard,Store,Receipt} from 'lucide-react';
+import {QRCodeSVG} from 'qrcode.react';
+import './styles.css';
+import { AccountPage, DeliveryDashboard, LoginPage, PartnerDashboard } from './AccountPages.jsx';
+import { apiFetch, clearSession, mapServerCart, readSession } from './session.js';
+
+const api=import.meta.env.VITE_API_URL||'http://localhost:5000';
+const cats=['Stationery','Electronics','Computer','Office Supplies','Books','Grocery','Home & Living','Personal Care','Printing & Ink'];
+function App(){return <Routes><Route path="*" element={<Shell/>}/></Routes>}
+class AppErrorBoundary extends React.Component{constructor(props){super(props);this.state={failed:false}}static getDerivedStateFromError(){return{failed:true}}componentDidCatch(error){console.error('OM Stationary render error:',error)}render(){return this.state.failed?<main className="app-error"><div className="panel"><h1>We hit a problem loading this page</h1><p>Your cart is saved on this device. Refresh to try again.</p><button className="btn" onClick={()=>window.location.reload()}>Refresh page</button></div></main>:this.props.children}}
+function Shell(){const catalog=useCatalog();const [user,setUser]=useState(()=>readSession()?.user||null),[cartReady,setCartReady]=useState(()=>!readSession()?.user);const notifications=useNotifications(user);
+ // Wishlist is owned by SQL Server. localStorage is only a cache so the header can render
+ // instantly; the server is the source of truth and is re-synced on every login/user change.
+ const [wishlist,setWishlist]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem('omwishlist')||'[]');return Array.isArray(saved)?saved:[]}catch{return[]}});
+ const [wishlistError,setWishlistError]=useState('');
+ const [wishlistLoading,setWishlistLoading]=useState(false);
+ const syncWishlistFromServer=useCallback(async()=>{setWishlistLoading(true);try{const r=await apiFetch('/api/wishlist');if(r.status===401){setWishlist([]);setWishlistError('');return}if(!r.ok)throw new Error('Wishlist could not be loaded.');const rows=await r.json();const ids=(Array.isArray(rows)?rows:[]).map(x=>x.productId);setWishlist(ids);setWishlistError('');try{localStorage.setItem('omwishlist',JSON.stringify(ids))}catch{}}catch(e){setWishlistError(e.message||'Wishlist could not be loaded.')}finally{setWishlistLoading(false)}},[]);
+ useEffect(()=>{if(user?.role==='Customer'){syncWishlistFromServer()}else{setWishlist([]);try{localStorage.removeItem('omwishlist')}catch{}}},[user?.id,user?.role,syncWishlistFromServer]);
+ const toggleWishlist=useCallback(async id=>{const saving=!wishlist.includes(id);const previous=wishlist;setWishlist(saving?[...wishlist,id]:wishlist.filter(x=>x!==id));try{localStorage.setItem('omwishlist',JSON.stringify(saving?[...previous,id]:previous.filter(x=>x!==id)))}catch{}
+   if(user?.role!=='Customer')return; // guests keep a device-local list until they sign in
+   try{const r=await apiFetch('/api/wishlist/'+encodeURIComponent(id),{method:saving?'POST':'DELETE'});if(r.status===401){syncWishlistFromServer();return}if(!r.ok)throw new Error('Wishlist could not be updated.');setWishlistError('');await syncWishlistFromServer()}catch(e){setWishlist(saving?previous.filter(x=>x!==id):[...previous,id]);try{localStorage.setItem('omwishlist',JSON.stringify(previous))}catch{}setWishlistError(e.message||'Wishlist could not be updated.')}},[wishlist,user?.role,syncWishlistFromServer]);
+ const [cart,setCart]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem('omcart')||'[]');return Array.isArray(saved)?saved:[]}catch{return[]}}); useEffect(()=>{try{localStorage.setItem('omcart',JSON.stringify(cart))}catch(e){console.warn('Cart could not be saved locally',e)}},[cart]);useEffect(()=>{if(!user){setCartReady(true);return}let alive=true;setCartReady(false);apiFetch('/api/cart').then(async r=>{if(!r.ok)throw new Error('cart');const data=await r.json();if(alive)setCart(mapServerCart(data.items))}).catch(()=>{if(alive)setCartReady(false)}).finally(()=>{});return()=>{alive=false}},[user?.id]);useEffect(()=>{if(!user||!cartReady)return;const timer=setTimeout(()=>apiFetch('/api/cart',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:cart.map(i=>({productId:i.id,quantity:i.q}))})}).catch(()=>{}),300);return()=>clearTimeout(timer)},[cart,user?.id,cartReady]);const onAuth=(nextUser,serverCart)=>{setUser(nextUser);setCart(serverCart);setCartReady(true)};const onLogout=async()=>{const session=readSession();try{if(session?.refreshToken)await apiFetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refreshToken:session.refreshToken})})}catch{}clearSession();sessionStorage.removeItem('omadminkey');setUser(null);setCart([]);setCartReady(true);setWishlist([]);try{localStorage.removeItem('omwishlist')}catch{}};
+const add=p=>setCart(c=>{const x=c.find(i=>i.id===p.id);return x?c.map(i=>i.id===p.id?{...i,q:Math.min(99,i.q+1)}:i):[...c,{...p,q:1}]});
+const change=(id,d)=>setCart(c=>c.map(i=>i.id===id?{...i,q:Math.max(0,i.q+d)}:i).filter(i=>i.q));
+return <><header><div className="top"><Link className="logo" to="/"><span>OM</span> STATIONARY<small>Everything You Need, One Place</small></Link><form className="search" action="/search"><Search size={20}/><input name="q" list="product-suggestions" placeholder="What are you looking for today?"/><datalist id="product-suggestions">{catalog.products.slice(0,100).map(p=><option key={p.id} value={p.name}/>)}<option value="A4 Paper"/><option value="Notebook"/><option value="Office supplies"/></datalist><button aria-label="Search"><Search size={18}/></button></form><div className="deliver"><MapPin size={20}/><div><small>Fulfillment</small><b>Check availability</b></div></div><Link to="/orders" className="headlink">Orders</Link><Link to="/wishlist" className="headlink" aria-label="Wishlist"><Heart/></Link><Link to="/notifications" className="headlink" aria-label="Notifications"><Bell/><span className="badge">{notifications.unread}</span></Link><Link to="/cart" className="headlink"><ShoppingCart/> <b>{cart.reduce((s,i)=>s+i.q,0)}</b></Link><Link to="/account" className="headlink"><User/></Link><Link to="/admin" className="admin-top-button"><Settings size={16}/> Admin</Link></div><nav>{[...new Set(catalog.products.map(p=>p.cat))].map(c=><Link key={c} to={'/search?cat='+encodeURIComponent(c)}>{c}</Link>)}</nav></header><main><Routes><Route path="/" element={<Home add={add} catalog={catalog} wishlist={wishlist} toggleWishlist={toggleWishlist}/>}/><Route path="/search" element={<SearchPage add={add} catalog={catalog} wishlist={wishlist} toggleWishlist={toggleWishlist}/>}/><Route path="/product/:id" element={<Product add={add} catalog={catalog} wishlist={wishlist} toggleWishlist={toggleWishlist}/>}/><Route path="/wishlist" element={<Wishlist catalog={catalog} wishlist={wishlist} add={add} toggleWishlist={toggleWishlist} user={user} error={wishlistError} loading={wishlistLoading} reload={syncWishlistFromServer}/>}/><Route path="/cart" element={<Cart cart={cart} change={change}/>}/><Route path="/checkout" element={<Checkout cart={cart} setCart={setCart} user={user}/>}/><Route path="/invoice/:id" element={<InvoicePage/>}/><Route path="/orders" element={<Orders user={user}/>}/><Route path="/track/:id" element={<Track/>}/><Route path="/account" element={<AccountPage user={user} onLogout={onLogout}/>}/><Route path="/login" element={<LoginPage onAuth={onAuth}/>}/><Route path="/register" element={<LoginPage register onAuth={onAuth}/>}/><Route path="/delivery" element={<DeliveryDashboard/>}/><Route path="/admin" element={<Admin user={user} onLogout={onLogout}/>}/><Route path="/about" element={<AboutPage/>}/><Route path="/contact" element={<ContactPage/>}/><Route path="/help" element={<HelpPage/>}/><Route path="/privacy" element={<LegalPage kind="privacy"/>}/><Route path="/terms" element={<LegalPage kind="terms"/>}/><Route path="/refund-policy" element={<LegalPage kind="refund"/>}/><Route path="/notifications" element={<NotificationsPage/>}/></Routes></main><FooterMap/></>}
+function useCatalog(){const [products,setProducts]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');useEffect(()=>{let active=true;fetch(api+'/api/products').then(r=>r.ok?r.json():Promise.reject()).then(rows=>{if(active)setProducts(rows.map(p=>({id:p.id,name:p.name,price:p.price,mrp:p.mrp,cat:p.category,img:p.imageUrl,desc:p.description}))) }).catch(()=>{if(active)setError('Could not load products. Check the API connection and try again.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);return{products,loading,error}}
+function typoMatches(text,term){const words=text.toLowerCase().split(/\W+/).filter(Boolean),query=term.split(/\W+/).filter(Boolean);return query.length>0&&query.every(q=>words.some(w=>{if(Math.abs(w.length-q.length)>1)return false;let i=0,j=0,edits=0;while(i<w.length&&j<q.length){if(w[i]===q[j]){i++;j++}else{if(++edits>1)return false;if(w.length>q.length)i++;else if(q.length>w.length)j++;else{i++;j++}}}return edits+(w.length-i)+(q.length-j)<=1}))}
+function Home({add,catalog,wishlist,toggleWishlist}){const {products,loading,error}=catalog,availableCats=[...new Set(products.map(p=>p.cat))],[recentIds]=useState(()=>{try{const ids=JSON.parse(localStorage.getItem('omrecent')||'[]');return Array.isArray(ids)?ids:[]}catch{return[]}}),recentProducts=recentIds.map(id=>products.find(p=>p.id===id)).filter(Boolean);return <><section className="hero hero-premium"><div><p className="eyebrow">LOCAL SHOPPING, MADE SIMPLE</p><h1>Everyday essentials,<br/><strong>all in one place.</strong></h1><p>Find the stationery, books and office essentials you need. Choose verified shop delivery when available, or collect from OM Stationary.</p><Link className="btn" to="/search">Explore products <ChevronRight/></Link><span className="hero-note"><ShieldCheck size={16}/> Clear prices &middot; Cash on delivery &middot; Easy pickup</span></div><div className="hero-art-panel"><div className="hero-monogram">OM<span>.</span></div><div className="hero-art-label"><MapPin size={16}/> Your local essentials, one stop away</div></div></section><section className="trust"><div><Search/> Easy product search</div><div><MapPin/> Official OM pickup</div><div><ShieldCheck/> Cash on delivery</div><div><PackageCheck/> Order tracking</div></section><div className="rowhead"><div><small className="section-eyebrow">THE EVERYDAY EDIT</small><h2>Shop by category</h2></div></div><div className="cats">{availableCats.map(c=><Link to={'/search?cat='+encodeURIComponent(c)} key={c}>{c}<ChevronRight size={15}/></Link>)}</div><div className="rowhead"><div><small className="section-eyebrow">FROM OUR CATALOGUE</small><h2>Popular essentials</h2></div><Link to="/search">Browse all <ChevronRight size={17}/></Link></div>{loading?<div className="catalog-state">Loading catalogue...</div>:error?<div className="catalog-state error" role="alert">{error} <button className="outline" onClick={()=>location.reload()}>Retry</button></div>:products.length?<div className="grid">{products.slice(0,8).map(p=><Card key={p.id} p={p} add={add} saved={wishlist.includes(p.id)} toggleWishlist={toggleWishlist}/>)}</div>:<div className="catalog-state">Our catalogue is being updated. Please check back soon.</div>}{recentProducts.length>0&&<><div className="rowhead"><div><small className="section-eyebrow">YOUR RECENTLY VIEWED</small><h2>Pick up where you left off</h2></div></div><div className="grid">{recentProducts.map(p=><Card key={p.id} p={p} add={add} saved={wishlist.includes(p.id)} toggleWishlist={toggleWishlist}/>)}</div></>}</>}
+function Card({p,add,saved=false,toggleWishlist}){
+  const [qty,setQty]=useState(1);
+  const discount=p.mrp>p.price?Math.round((1-p.price/p.mrp)*100):0;
+  const addQty=()=>{
+    for(let i=0;i<qty;i++) add(p);
+  };
+  return <article className="card">
+    <Link className="card-image" to={'/product/'+p.id}>
+      {p.img?<img src={p.img} alt={p.name} loading="lazy"/>:<span className="image-placeholder"><PackageCheck/></span>}
+    </Link>
+    <button type="button" className={saved?"wishlist-toggle saved":"wishlist-toggle"} aria-label={saved?"Remove from wishlist":"Save to wishlist"} onClick={()=>toggleWishlist?.(p.id)}>
+      <Heart size={17} fill={saved?"currentColor":"none"}/>
+    </button>
+    <div className="pad">
+      <small>{p.cat}</small>
+      <Link className="pname" to={'/product/'+p.id}>{p.name}</Link>
+      <div className="card-price"><b className="price">&#8377;{p.price}</b>{p.mrp>p.price&&<><del>&#8377;{p.mrp}</del><span className="discount">{discount}% off</span></>}</div>
+      <p className="stock-note">Availability confirmed when your order is placed</p>
+      <div className="add-row">
+        <div className="qty-mini">
+          <button type="button" onClick={()=>setQty(v=>Math.max(1,v-1))}>âˆ’</button>
+          <b>{qty}</b>
+          <button type="button" onClick={()=>setQty(v=>Math.min(99,v+1))}>+</button>
+        </div>
+        <button className="add" onClick={addQty}><Plus size={16}/> Add <span className="added-preview">{qty}</span></button>
+      </div>
+      <Link className="card-view" to={'/product/'+p.id}>View product <ChevronRight size={15}/></Link>
+    </div>
+  </article>
+}
+function SearchPage({add,catalog,wishlist,toggleWishlist}){const route=useLocation(),params=new URLSearchParams(route.search),q=(params.get('q')||'').trim(),cat=params.get('cat')||'', [sort,setSort]=useState('relevance'),[page,setPage]=useState(1),[debounced,setDebounced]=useState(q),[items,setItems]=useState([]),[total,setTotal]=useState(0),[loading,setLoading]=useState(true),[error,setError]=useState(''),[categories,setCategories]=useState([]),[brand,setBrand]=useState(''),[minPrice,setMinPrice]=useState(''),[maxPrice,setMaxPrice]=useState(''),[available,setAvailable]=useState(false);useEffect(()=>{const t=setTimeout(()=>{setDebounced(q);setPage(1)},300);return()=>clearTimeout(t)},[q]);useEffect(()=>{fetch(api+'/api/categories').then(r=>r.ok?r.json():[]).then(setCategories).catch(()=>setCategories([...new Set(catalog.products.map(p=>p.cat))]))},[catalog.products]);useEffect(()=>{let active=true;setLoading(true);setError('');const params=new URLSearchParams({paginated:'true',page:String(page),pageSize:'24',sort});if(debounced)params.set('q',debounced);if(cat)params.set('category',cat);if(brand.trim())params.set('brand',brand.trim());if(minPrice)params.set('minPrice',minPrice);if(maxPrice)params.set('maxPrice',maxPrice);if(available)params.set('available','true');fetch(api+'/api/products?'+params.toString()).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not search products.');return d}).then(d=>{if(active){setItems((d.items||[]).map(p=>({id:p.id,name:p.name,price:p.price,mrp:p.mrp,cat:p.category,img:p.imageUrl,desc:p.description,brand:p.brand,sku:p.sku})));setTotal(d.total||0)}}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[debounced,cat,sort,page,brand,minPrice,maxPrice,available]);const pages=Math.max(1,Math.ceil(total/24));return <><div className="pagehead"><small>PRODUCTS</small><h1>{debounced?`Results for "${debounced}"`:cat||'Shop all products'}</h1><p>{loading?'Searching catalogue...':`${total} ${total===1?'product':'products'} in the OM Stationary catalogue`}</p></div><div className="listing-tools"><div className="category-filters"><Link className={!cat?'selected':''} to="/search">All</Link>{categories.map(c=><Link className={cat===c?'selected':''} key={c} to={'/search?cat='+encodeURIComponent(c)}>{c}</Link>)}</div><label>Sort by <select value={sort} onChange={e=>{setPage(1);setSort(e.target.value)}}><option value="relevance">Relevance</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option></select></label></div><div className="search-filters"><label>Brand<input value={brand} onChange={e=>{setPage(1);setBrand(e.target.value)}} placeholder="Filter brand"/></label><label>Min price<input type="number" min="0" value={minPrice} onChange={e=>{setPage(1);setMinPrice(e.target.value)}}/></label><label>Max price<input type="number" min="0" value={maxPrice} onChange={e=>{setPage(1);setMaxPrice(e.target.value)}}/></label><label className="filter-check"><input type="checkbox" checked={available} onChange={e=>{setPage(1);setAvailable(e.target.checked)}}/> In stock at OM Stationary</label></div>{error?<div className="catalog-state error" role="alert">{error}</div>:loading?<div className="catalog-state">Loading products...</div>:items.length?<><div className="grid">{items.map(p=><Card key={p.id} p={p} add={add} saved={wishlist.includes(p.id)} toggleWishlist={toggleWishlist}/>)}</div><nav className="pagination" aria-label="Product pages"><button className="outline" disabled={page<=1} onClick={()=>setPage(page-1)}>Previous</button><span>Page {page} of {pages}</span><button className="outline" disabled={page>=pages} onClick={()=>setPage(page+1)}>Next</button></nav></>:<div className="empty"><Search size={40}/><h2>No matching products</h2><p>Try another product name or browse a category.</p><Link className="btn" to="/search">Clear search</Link></div>}</>}function Product({add,catalog,wishlist,toggleWishlist}){const navigate=useNavigate(),id=useParams().id,existing=catalog.products.find(x=>x.id===Number(id)),[remote,setRemote]=useState(null),[missing,setMissing]=useState(false);useEffect(()=>{let alive=true;setRemote(null);setMissing(false);if(catalog.loading)return()=>{alive=false};if(existing){setRemote(existing);return()=>{alive=false}}fetch(api+'/api/products/'+encodeURIComponent(id)).then(async r=>{if(r.status===404){setMissing(true);return null}if(!r.ok)throw new Error('Could not load product.');return r.json()}).then(p=>{if(alive&&p)setRemote({id:p.id,name:p.name,price:p.price,mrp:p.mrp,cat:p.category,img:p.imageUrl,desc:p.description,brand:p.brand,sku:p.sku});else if(alive&&!p)setMissing(true)}).catch(()=>{if(alive)setMissing(true)});return()=>{alive=false}},[id,catalog.loading,existing?.id]);const p=existing||remote;useEffect(()=>{if(!p)return;try{const ids=JSON.parse(localStorage.getItem('omrecent')||'[]'),recent=[p.id,...(Array.isArray(ids)?ids.filter(x=>x!==p.id):[])].slice(0,6);localStorage.setItem('omrecent',JSON.stringify(recent))}catch{}},[p?.id]);if(catalog.loading&&!p)return <div className="catalog-state">Loading product...</div>;if(!p&&!missing)return <div className="catalog-state">Loading product...</div>;if(!p)return <div className="empty"><PackageCheck/><h1>Product not found</h1><Link className="btn" to="/search">Browse products</Link></div>;return <><Link className="back" to="/search"><ArrowLeft/> Back to products</Link><section className="product product-premium"><div className="product-media">{p.img?<img src={p.img} alt={p.name}/>:<span className="image-placeholder"><PackageCheck/></span>}<span className="image-caption">OM Stationary catalogue</span></div><div className="product-info"><small>{p.cat}</small><h1>{p.name}</h1>{p.brand&&<p>{p.brand}</p>}<p>{p.desc||'Product details will be updated by OM Stationary.'}</p><div className="bigprice">&#8377;{p.price} {p.mrp>p.price&&<del>&#8377;{p.mrp}</del>}</div><p className="tax-note">Final price and availability are confirmed by the shop at order placement.</p><div className="deliverybox"><b>Choose delivery or pickup at checkout</b><span>Delivery is shown only for configured cities and verified shop stock. You can also select the official OM Stationary Pickup Station.</span></div><div className="purchase-actions"><button className="wishlist-detail" onClick={()=>toggleWishlist?.(p.id)}><Heart size={17} fill={wishlist.includes(p.id)?"currentColor":"none"}/>{wishlist.includes(p.id)?"Saved":"Save"}</button><button className="btn" onClick={()=>add(p)}><Plus size={17}/> Add to cart</button><button className="outline" onClick={()=>{add(p);navigate('/checkout')}}>Buy now</button></div><div className="product-trust"><ShieldCheck size={17}/> Cash on delivery available. Online payments are not yet configured.</div></div></section></>}function Wishlist({catalog,wishlist,add,toggleWishlist,user,error='',loading=false,reload}){const {products,loading:catalogLoading,error:catalogError}=catalog,items=products.filter(p=>wishlist.includes(p.id));return <><div className="pagehead"><small>SAVED PRODUCTS</small><h1>Your wishlist</h1><p>{user?.role==='Customer'?'Saved to your OM Stationary account - it stays on every device you sign in from.':"You're browsing as a guest. Sign in to save this wishlist to your account."}</p></div>{error?<div className="catalog-state error" role="alert">{error} <button className="outline" onClick={()=>reload?.()}>Retry</button></div>:loading||catalogLoading?<div className="catalog-state">Loading saved products...</div>:items.length?<div className="grid">{items.map(p=><Card key={p.id} p={p} add={add} saved toggleWishlist={toggleWishlist}/>)}</div>:<div className="empty"><Heart size={40}/><h2>Your wishlist is empty</h2><p>{user?.role==='Customer'?'Tap the heart on any product to save it here.':'Sign in and tap the heart on any product to save it here.'}</p><Link className="btn" to="/search">Browse products</Link></div>}</>}
+function Cart({cart,change}){const total=cart.reduce((s,i)=>s+i.price*i.q,0);if(!cart.length)return <div className="empty"><ShoppingCart size={48}/><h1>Your cart is empty</h1><Link className="btn" to="/search">Continue Shopping</Link></div>;return <><div className="pagehead"><small>CART</small><h1>Your Shopping Cart</h1></div><div className="cartlayout"><div>{cart.map(i=><div className="cartitem" key={i.id}><img src={i.img} alt={i.name}/><div><b>{i.name}</b><small>{i.cat}</small><div className="qty"><button onClick={()=>change(i.id,-1)}><Minus/></button>{i.q}<button onClick={()=>change(i.id,1)}><Plus/></button></div></div><strong>&#8377;{i.price*i.q}</strong></div>)}</div><aside className="summary"><h3>Order Summary</h3><p><span>Items</span><b>&#8377;{total}</b></p><p><span>Shop pickup</span><b>Free</b></p><hr/><p className="total"><span>Total</span><b>&#8377;{total}</b></p><Link className="btn wide" to="/checkout">Proceed to Checkout</Link></aside></div></>}
+function rememberOrder(number,token){try{const saved=JSON.parse(localStorage.getItem('omorders')||'[]');localStorage.setItem('omorders',JSON.stringify([number,...(Array.isArray(saved)?saved.filter(x=>x!==number):[])].slice(0,12)));localStorage.setItem(`omtrack:${number}`,token)}catch{}}
+function Orders({user}){const nav=useNavigate(),[number,setNumber]=useState(''),[recent,setRecent]=useState([]),[loading,setLoading]=useState(true);useEffect(()=>{let active=true;let ids=[];try{ids=JSON.parse(localStorage.getItem('omorders')||'[]');if(!Array.isArray(ids))ids=[]}catch{};(user?.role==='Customer'?apiFetch('/api/customers/orders').then(r=>r.ok?r.json():[]):Promise.all(ids.map(id=>apiFetch(`${api}/api/orders/${encodeURIComponent(id)}`,{headers:{'X-Tracking-Token':localStorage.getItem(`omtrack:${id}`)||''}}).then(r=>r.ok?r.json():null).catch(()=>null)))).then(rows=>{if(active)setRecent(rows.filter(Boolean))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[user?.id]);return <><div className="pagehead"><small>MY ORDERS</small><h1>Track your orders</h1><p>Orders placed on this device appear here. You can also look up an order number from your confirmation.</p></div><div className="order-lookup panel"><form onSubmit={e=>{e.preventDefault();if(number.trim())nav('/track/'+encodeURIComponent(number.trim()))}}><label className="field-label">Order number<input required value={number} onChange={e=>setNumber(e.target.value)} placeholder="OM123456789"/></label><button className="btn">Find order</button></form></div><div className="rowhead"><h2>Recent orders</h2></div>{loading?<div className="catalog-state">Loading orders...</div>:recent.length?<div className="recent-orders">{recent.map(o=><Link className="recent-order" to={'/track/'+o.orderNumber} key={o.orderNumber}><div><b>{o.orderNumber}</b><span>{o.status} ? {new Date(o.createdAt).toLocaleDateString()}</span></div><b>&#8377;{o.totalAmount}</b><ChevronRight size={18}/></Link>)}</div>:<div className="catalog-state">No recent orders on this device yet.</div>}</>}
+// Lightweight notification polling for signed-in customers. The API is the source of truth:
+// the bell only shows what the Notifications table actually contains.
+function useNotifications(user){
+  const [state,setState]=useState({unread:0,items:[]});
+  const load=useCallback(async()=>{
+    if(user?.role!=='Customer'){setState({unread:0,items:[]});return}
+    try{
+      const r=await apiFetch('/api/notifications?take=30');
+      if(!r.ok)return;
+      setState(await r.json());
+    }catch{}
+  },[user?.id,user?.role]);
+  useEffect(()=>{load()},[load]);
+  useEffect(()=>{
+    if(user?.role!=='Customer')return;
+    const timer=setInterval(load,15000);
+    return()=>clearInterval(timer);
+  },[load,user?.role]);
+  return {...state,refresh:load};
+}
+
+function NotificationsPage(){
+  const session=readSession(),[data,setData]=useState({unread:0,items:[]}),[loading,setLoading]=useState(true);
+  const load=async()=>{setLoading(true);try{const r=await apiFetch('/api/notifications?take=50');if(r.ok)setData(await r.json())}catch{}finally{setLoading(false)}};
+  useEffect(()=>{load()},[]);
+  if(!session?.accessToken)return <div className="empty"><Bell size={40}/><h1>Sign in to see notifications</h1><p>Order updates appear here once you are signed in.</p><Link className="btn" to="/login">Sign in</Link></div>;
+  const markAll=async()=>{await apiFetch('/api/notifications/read-all',{method:'POST'});load()};
+  return <><div className="pagehead"><small>NOTIFICATIONS</small><h1>Your notifications</h1><p>Order updates from OM Stationary. Refreshes automatically every 15 seconds.</p>{data.unread>0&&<button className="outline" onClick={markAll}>Mark all as read</button>}</div>
+  {loading?<div className="catalog-state">Loading notifications...</div>:data.items.length?<div className="notification-list">{data.items.map(n=><article className={n.isRead?'notification':'notification unread'} key={n.id}><div><b>{n.title}</b><p>{n.message}</p><small>{new Date(n.createdAt).toLocaleString()}</small></div>{n.orderId&&<Link className="outline" to={'/track/'+n.orderId}>Track</Link>}</article>)}</div>:<div className="empty"><Bell size={40}/><h2>No notifications yet</h2><p>You will be notified here when your order status changes.</p><Link className="btn" to="/orders">View my orders</Link></div>}</>;
+}
+
+const OM_CONTACT={name:'OM Stationary',address:'G5JF+784, Ambedkar Rd, Sohgi, Bihar 800007',landmark:'Opp. Shravani Enclave, Sampatchak, Patna, Bihar',plusCode:'G5JF+784',maps:'https://www.google.com/maps/dir/?api=1&destination=25.5305282,85.173357'};
+
+function AboutPage(){
+  return <><div className="pagehead"><small>ABOUT US</small><h1>OM Stationary</h1><p>Your neighbourhood stationery and office supplies store in Patna, online and in person.</p></div>
+  <section className="content-prose"><h2>Who we are</h2><p>OM Stationary sells stationery, printing supplies, office supplies and school supplies directly through this website. When you order here, you are ordering from us - we stock the products, pack them and deliver them ourselves.</p>
+  <h2>Visit the store</h2><p>We are at <b>{OM_CONTACT.address}</b>, {OM_CONTACT.landmark}. Our plus code is <b>{OM_CONTACT.plusCode}</b>.</p>
+  <p><a className="btn" href={OM_CONTACT.maps} target="_blank" rel="noreferrer"><Navigation size={16}/> Get directions</a></p>
+  <h2>How ordering works</h2><ul><li>Browse the catalogue and add products to your cart.</li><li>Choose delivery to your address, or pickup from the store.</li><li>Pay cash on delivery, or online if online payment is enabled.</li><li>Track your order from placement through to delivery.</li></ul>
+  <h2>Fair pricing</h2><p>The price you see is the price you pay. Taxes and delivery charges, if any, are shown before you place the order.</p></section></>;
+}
+
+function ContactPage(){
+  const location=usePickupLocation();
+  return <><div className="pagehead"><small>CONTACT</small><h1>Contact OM Stationary</h1><p>Visit the store, or reach us before you order.</p></div>
+  <div className="contact-layout"><section className="panel"><h2>Store address</h2><p><b>{OM_CONTACT.name}</b><br/>{OM_CONTACT.address}<br/>{OM_CONTACT.landmark}</p><p><b>Plus code:</b> {OM_CONTACT.plusCode}</p><a className="btn" href={OM_CONTACT.maps} target="_blank" rel="noreferrer"><Navigation size={16}/> Get directions</a>
+  {location?.hours&&<p className="pickup-meta"><Clock size={15}/>{location.hours}</p>}{location?.phone&&<p className="pickup-meta"><Phone size={15}/><a href={'tel:'+location.phone}>{location.phone}</a></p>}{location?.email&&<p className="pickup-meta"><Mail size={15}/><a href={'mailto:'+location.email}>{location.email}</a></p>}</section>
+  <section className="panel"><h2>Need help with an order?</h2><p>Open the order from your account and use the track link to see its current status. For anything else, visit the store during business hours.</p><Link className="btn" to="/help">Help &amp; support</Link><Link className="outline" to="/orders">My orders</Link></section></div></>;
+}
+
+function HelpPage(){
+  const [open,setOpen]=useState(0);
+  const faqs=[['How do I track my order?','Open My Orders and select Track. Every status change is recorded by the store, so the timeline always reflects the real state of your order.'],['Can I pay when the order arrives?','Yes. Cash on delivery is available in serviceable PIN codes. Online payment appears at checkout only when it is enabled for the store.'],['How do I collect from the store?','Choose Pickup at checkout and select a date and time. You will get a notification when your order is packed and ready.'],['What if an item is out of stock?','Stock is checked again on the server when you place the order. If something is unavailable you will be told before the order is created.'],['How do I change or cancel an order?','Contact the store as early as possible. Orders can only be cancelled while they have not been handed over for delivery.'],['I forgot my password.','Use the password reset option on the sign-in page to receive a reset link by email.']];
+  return <><div className="pagehead"><small>HELP &amp; SUPPORT</small><h1>Frequently asked questions</h1><p>Answers to the questions we are asked most often.</p></div>
+  <div className="faq-list">{faqs.map(([q,a],i)=><details className="faq" key={q} open={open===i} onToggle={e=>setOpen(e.target.open?i:-1)}><summary>{q}</summary><p>{a}</p></details>)}</div>
+  <section className="panel help-cta"><h2>Still need help?</h2><p>Visit the store or get in touch during business hours.</p><Link className="btn" to="/contact">Contact us</Link></section></>;
+}
+
+const LEGAL={privacy:{title:'Privacy Policy',intro:'This policy explains what OM Stationary collects when you use this website, and what we do with it.',sections:[['What we collect','We collect your name, mobile number, email address, delivery addresses, order details and payment status. We never ask for and never store card numbers, CVV, UPI PIN or any payment password.'],['Why we collect it','We use your details to process orders, deliver products, issue invoices, provide order updates and support you after delivery.'],['How long we keep it','We keep your order and invoice records for as long as needed for accounting and after-sales support. You can ask us to delete your account at any time.'],['Who we share it with','We do not sell your personal data. We share only what is strictly necessary with the delivery partner handling your order.'],['Your choices','You can view and edit your profile, addresses and order history from your account, and you can ask us to correct or delete your information.']]},terms:{title:'Terms & Conditions',intro:'These terms govern your use of the OM Stationary website and the orders you place through it.',sections:[['About us','OM Stationary is an independent retailer operating from G5JF+784, Ambedkar Rd, Sohgi, Patna, Bihar 800007.'],['Orders','An order is accepted only after the store confirms it. We may cancel an order if an item is unavailable or an obvious pricing error is found, and we will refund any amount collected.'],['Pricing','Prices include all charges shown at checkout. Prices and stock can change, and the price at the time your order is accepted is the price that applies.'],['Delivery','Delivery is available in configured PIN codes. Delivery is attempted during business hours. Risk and title pass to you on delivery.'],['Pickup','Pickup orders must be collected within the requested window. Uncollected orders may be cancelled and refunded.'],['Liability','We are responsible for delivering the goods described on your invoice. Nothing in these terms limits your statutory consumer rights.']]},refund:{title:'Refund Policy',intro:'We want refunds to be simple and fair. This policy explains when and how they work.',sections:[['Damaged or wrong items','Contact us within 48 hours of delivery with photographs. We will arrange a replacement or a full refund.'],['Order cancelled by us','If we cancel your order, any amount collected is refunded in full to the original payment method.'],['Cash on delivery','For cash on delivery orders, a refund is processed by our team and settled to your account within 5-7 working days of approval.'],['Online payments','Refunds go back to the original payment method and may take 5-7 working days to appear, depending on your bank or provider.'],['Non-refundable cases','Change-of-mind returns are not accepted on opened stationery, unless the product is faulty or incorrect.']]}}[''+''];
+
+function LegalPage({kind}){
+  const doc=LEGAL[kind];
+  if(!doc)return <div className="empty"><h1>Page not found</h1><Link className="btn" to="/">Back to home</Link></div>;
+  return <><div className="pagehead"><small>OM STATIONARY</small><h1>{doc.title}</h1><p>{doc.intro}</p></div>
+  <section className="content-prose">{doc.sections.map(([h,p])=><div key={h}><h2>{h}</h2><p>{p}</p></div>)}<p className="muted">Last updated 1 September 2026. OM Stationary, {OM_CONTACT.address}.</p></section></>;
+}
+// Fallback used only until the admin's first load returns the authoritative list from the server.
+// The backend sends `nextStatuses` per order, which is what the action buttons are actually built from.
+const FALLBACK_NEXT_STATUSES={
+ 'Pending':['Confirmed'],'Placed':['Confirmed'],'Confirmed':['Preparing'],'Accepted':['Preparing'],
+ 'Preparing':['Ready for Pickup','Out for Delivery'],'Ready for Pickup':['Picked Up','Out for Delivery'],
+ 'Picked Up':['Delivered'],'Out for Delivery':['Delivered'],'Delivery Failed':['Confirmed'],
+ 'Delivered':[],'Cancelled':[],'RefundPending':['Refunded'],'Refunded':[]};
+const ACTION_LABELS={'Confirmed':'Confirm order','Accepted':'Accept order','Preparing':'Start preparing',
+ 'Ready for Pickup':'Mark ready for pickup','Picked Up':'Mark picked up','Out for Delivery':'Send out for delivery',
+ 'Delivered':'Mark delivered','Delivery Failed':'Report delivery failed','Confirmed (retry)':'Retry confirmation',
+ 'RefundPending':'Request refund','Refunded':'Mark refunded'};
+
+function Admin({user,onLogout}){
+ const [key,setKey]=useState(()=>sessionStorage.getItem('omadminkey')||''),[entry,setEntry]=useState(()=>sessionStorage.getItem('omadminkey')||''),
+ [orders,setOrders]=useState([]),[dashboard,setDashboard]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(false),[message,setMessage]=useState(''),[tab,setTab]=useState('orders'),[pendingStatus,setPendingStatus]=useState(null);
+ const nextStatusesFor=o=>Array.isArray(o.nextStatuses)?o.nextStatuses:(FALLBACK_NEXT_STATUSES[o.status]??[]);
+ const session=readSession(),hasAdminSession=user?.role==='Admin'&&!!session?.accessToken,headers={...(hasAdminSession?{Authorization:`Bearer ${session.accessToken}`}:{'X-Admin-Key':key}),'Content-Type':'application/json'};
+ const load=async()=>{if(!key&&!hasAdminSession)return;setLoading(true);setError('');try{
+   const [o,d,p]=await Promise.all([
+     apiFetch(api+'/api/orders',{headers}),
+     apiFetch(api+'/api/admin/dashboard',{headers}),
+     apiFetch(api+'/api/admin/products?pageSize=50',{headers})]);
+   if(o.status===401)throw new Error('Admin sign-in is required.');
+   if(!o.ok)throw new Error('Could not load orders.');
+   setOrders(await o.json());
+   setDashboard(d.ok?await d.json():null);
+   setProducts(p.ok?(await p.json()).items||[]:[]);
+ }catch(e){setError(e.message)}finally{setLoading(false)}};
+ useEffect(()=>{load()},[key,user?.id]);
+ const saveKey=e=>{e.preventDefault();sessionStorage.setItem('omadminkey',entry);setKey(entry)};
+  const setStatus=async(id,status)=>{setMessage('');setError('');setPendingStatus(id);try{const r=await apiFetch(`${api}/api/orders/${id}/status`,{method:'PATCH',headers,body:JSON.stringify({status})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||`This order cannot move to ${status}.`);setMessage(`Order moved to ${status}.`);await load()}catch(e){setError(e.message||'Status update failed.')}finally{setPendingStatus(null)}};
+ const assign=async(id,form)=>{const values=new FormData(form.currentTarget);try{const r=await apiFetch(`${api}/api/orders/${id}/delivery`,{method:'POST',headers,body:JSON.stringify({partnerName:values.get('partner'),trackingCode:values.get('tracking')})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Delivery assignment failed.');setMessage('Delivery assignment saved.');await load()}catch(e){setError(e.message)}};
+ const markPaid=async id=>{try{const r=await apiFetch(`${api}/api/orders/${id}/payment`,{method:'PATCH',headers,body:JSON.stringify({status:'Paid'})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not confirm COD receipt.');setMessage('Cash receipt recorded.');await load()}catch(e){setError(e.message)}};
+ const adjustStock=async(id,delta)=>{try{const r=await apiFetch(`${api}/api/admin/products/${id}/stock`,{method:'POST',headers,body:JSON.stringify({delta})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not update stock.');setMessage('Stock updated.');await load()}catch(e){setError(e.message)}};
+ const toggleProduct=async p=>{try{const r=await apiFetch(`${api}/api/admin/products/${p.id}`,{method:'PUT',headers,body:JSON.stringify({name:p.name,sku:p.sku,brand:p.brand,unit:p.unit,category:p.category,description:p.description,shortDescription:p.description,price:p.price,mrp:p.mrp,stock:p.stock,lowStockThreshold:p.lowStockThreshold,imageUrl:p.imageUrl,isActive:!p.isActive})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'Could not update product.');setMessage('Product updated.');await load()}catch(e){setError(e.message)}};
+ if(!key&&!hasAdminSession)return <div className="account panel"><h1>Admin sign in</h1><p>Sign in with an Admin account to manage orders, catalogue and stock.</p><Link className="btn wide" to="/login">Sign in</Link><form onSubmit={saveKey}><label className="field-label">Legacy admin access key<input type="password" value={entry} onChange={e=>setEntry(e.target.value)}/></label><button className="outline wide">Use legacy key</button></form></div>;
+ const money=v=>'&#8377;'+Number(v||0).toLocaleString('en-IN');
+ return <><div className="pagehead"><small>ADMIN PANEL</small><h1>OM Stationary control centre</h1><p>Manage orders, catalogue, stock and delivery for the OM Stationary store.</p><button className="outline" onClick={onLogout}>Sign out</button></div>
+ {error&&<p className="form-error" role="alert">{error}</p>}{message&&<p role="status">{message}</p>}
+ {dashboard&&<div className="adminstats"><div><b>{dashboard.totalOrders}</b><span>Total orders</span></div><div><b>{dashboard.todayOrders}</b><span>Today's orders</span></div><div><b>{dashboard.pendingOrders}</b><span>Needs action</span></div><div><b>{dashboard.deliveredOrders}</b><span>Delivered</span></div><div><b>{money(dashboard.revenue)}</b><span>Revenue</span></div><div><b>{money(dashboard.codAmount)}</b><span>COD outstanding</span></div><div><b>{dashboard.customers}</b><span>Customers</span></div><div><b>{dashboard.lowStockProducts}</b><span>Low stock</span></div></div>}
+ <div className="listing-tools"><div className="category-filters">{['orders','products'].map(t=><Link key={t} className={tab===t?'selected':''} onClick={e=>{e.preventDefault();setTab(t)}} to="#">{t==='orders'?'Orders':'Products & Stock'}</Link>)}</div><button className="outline" onClick={load} disabled={loading}>{loading?'Refreshing...':'Refresh'}</button></div>
+ {tab==='orders'&&<section className="panel admin-orders"><div className="rowhead"><h2>Orders</h2><span>{orders.length} total</span></div>
+  {orders.map(o=><article className="admin-order" key={o.id}><div className="admin-order-head"><div><b>{o.orderNumber}</b><span>{o.customerName} &middot; {o.customerPhone}</span></div><div><b>{money(o.totalAmount)}</b><span>{o.paymentMethod} &middot; {o.paymentStatus}</span></div></div>
+  <p>{o.deliveryAddress}{o.city?`, ${o.city} ${o.pincode}`:''}</p>
+   <div className="admin-order-controls">
+    <div className="admin-status-actions"><span className="admin-current-status">Status: <b>{o.status}</b></span>
+     {nextStatusesFor(o).length?nextStatusesFor(o).map(s=><button key={s} className="outline" disabled={pendingStatus===o.id} onClick={()=>setStatus(o.id,s)}>{ACTION_LABELS[s]||s}</button>):<span className="admin-terminal">No further action available.</span>}
+     {pendingStatus===o.id&&<small role="status">Saving...</small>}
+    </div>
+    <form className="assign-form" onSubmit={e=>{e.preventDefault();assign(o.id,e)}}><label className="field-label">Delivery partner<input name="partner" required placeholder="Partner name"/></label><label className="field-label">Tracking code<input name="tracking" placeholder="Optional"/></label><button className="outline">Assign delivery</button></form>
+    {o.paymentStatus!=='Paid'&&['Delivered','Picked Up'].includes(o.status)&&<button className="outline" onClick={()=>markPaid(o.id)}>Confirm cash received</button>}
+   </div></article>)}{!loading&&!orders.length&&<p>No orders yet.</p>}</section>}
+ {tab==='products'&&<section className="panel admin-orders"><div className="rowhead"><h2>Products &amp; stock</h2><span>{products.length} products</span></div>
+  <div className="listing-tools"><table className="admin-table"><thead><tr><th>Product</th><th>SKU</th><th>Price</th><th>Stock</th><th>Adjust</th><th>Status</th></tr></thead><tbody>
+  {products.map(p=><tr key={p.id}><td><b>{p.name}</b><small>{p.category} &middot; {p.unit}</small></td><td>{p.sku||'-'}</td><td>{money(p.price)}</td><td className={p.stock<=p.lowStockThreshold?'low-stock':''}>{p.stock}</td><td><button className="outline" onClick={()=>adjustStock(p.id,10)}>+10</button><button className="outline" onClick={()=>adjustStock(p.id,-1)}>-1</button></td><td><button className="outline" onClick={()=>toggleProduct(p)}>{p.isActive?'Active':'Inactive'}</button></td></tr>)}
+  </tbody></table></div></section>}
+ </>;
+}
+function usePickupLocation(){
+  const [location,setLocation]=useState(null);
+  useEffect(()=>{
+    let active=true;
+    fetch(api+'/api/locations/om-stationary')
+      .then(r=>r.ok?r.json():Promise.reject())
+      .then(d=>{if(active)setLocation(d)})
+      .catch(()=>{if(active)setLocation(null)});
+    return()=>{active=false};
+  },[]);
+  return location;
+}
+function PickupStation({location,compact=false}){const address=location?.address||"",target=location?.latitude&&location?.longitude?`${location.latitude},${location.longitude}`:address,directions=address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}`:"",map=address?`https://maps.google.com/maps?q=${encodeURIComponent(target)}&output=embed`:"";return <section className={`pickup-station${compact?" compact":""}`}><div className="pickup-copy"><div className="pickup-title"><MapPin size={19}/><div><h3>OM Stationary Pickup Station</h3>{address&&<span className="pickup-status">&#9679; Pickup available</span>}</div></div><p className="pickup-address">{address||"Set OmStationary:Address in backend configuration to show this location."}</p>{location?.hours&&<p className="pickup-meta"><Clock size={15}/>{location.hours}</p>}{location?.phone&&<a className="pickup-meta" href={`tel:${location.phone}`}><Phone size={15}/>{compact?"Contact":location.phone}</a>}{!compact&&location?.email&&<a className="pickup-meta" href={`mailto:${location.email}`}><Mail size={15}/>{location.email}</a>}{address&&<div className="pickup-actions"><a className="btn" href={directions} target="_blank" rel="noreferrer"><Navigation size={16}/> Get Directions</a>{location?.phone&&<a className="outline" href={`tel:${location.phone}`}>Contact</a>}</div>}</div>{map&&<iframe title="OM Stationary Pickup Station map" src={map} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/>}</section>}
+function Checkout({cart,setCart,user}){const nav=useNavigate(),location=usePickupLocation(),[method,setMethod]=useState('Pickup'),[options,setOptions]=useState({enabled:false,cities:[],charge:null}),[city,setCity]=useState(''),[pincode,setPincode]=useState(''),[coordinates,setCoordinates]=useState(null),[geoError,setGeoError]=useState(''),[locating,setLocating]=useState(false),[quote,setQuote]=useState(null),[quoteError,setQuoteError]=useState(''),[couponCode,setCouponCode]=useState(''),[couponResult,setCouponResult]=useState(null),[couponMessage,setCouponMessage]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);const subtotal=cart.reduce((s,i)=>s+i.price*i.q,0);useEffect(()=>{fetch(api+'/api/delivery/options').then(r=>r.ok?r.json():Promise.reject()).then(d=>{setOptions(d);setCity(d.cities?.[0]||'')}).catch(()=>setOptions({enabled:false,cities:[],charge:null}))},[]);useEffect(()=>{if(method!=='Delivery'||!city||!cart.length){setQuote(null);setQuoteError('');return}if(!/^\d{6}$/.test(pincode)){setQuote(null);setQuoteError('Enter a 6 digit PIN code to check serviceability.');return}if(!coordinates){setQuote(null);setQuoteError('Share your location to check the delivery radius.');return}let active=true;setQuote(null);setQuoteError('Checking serviceability, verified stock and delivery price...');const timer=setTimeout(()=>fetch(api+'/api/delivery/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fulfillmentMethod:'Delivery',city,pincode,latitude:coordinates.latitude,longitude:coordinates.longitude,couponCode:couponCode.trim(),items:cart.map(i=>({productId:i.id,quantity:i.q}))})}).then(async r=>{const data=await r.json();if(!r.ok)throw new Error(data.detail||'Could not get delivery quote.');return data}).then(d=>{if(!active)return;setQuote(d.available?d:null);setQuoteError(d.available?'':d.reason||'Delivery unavailable.')}).catch(e=>{if(active){setQuote(null);setQuoteError(e.message)}}),350);return()=>{active=false;clearTimeout(timer)}},[method,city,pincode,coordinates,cart,couponCode]);const available=method==='Pickup'?Boolean(location?.pickupAvailable&&location.address):Boolean(options.enabled&&quote?.available);const submit=async e=>{e.preventDefault();if(!available)return;setLoading(true);setError('');const form=new FormData(e.currentTarget),pickupTime=form.get('pickupTime'),deliveryAddress=method==='Delivery'?[form.get('addressLine'),form.get('landmark'),city,form.get('state'),pincode].filter(Boolean).join(', '):'',body={customerName:form.get('name'),customerPhone:form.get('phone'),customerEmail:(form.get('email')||user?.email||'').trim(),billingAddress:(form.get('billingAddress')||deliveryAddress||'').trim(),fulfillmentMethod:method,paymentMethod:'COD',requestedPickupDate:method==='Pickup'?new Date(pickupTime).toISOString():null,quotedTotal:method==='Delivery'?quote.total:(couponResult?.total??null),couponCode:couponCode.trim(),items:cart.map(i=>({productId:i.id,quantity:i.q})),addressLine:form.get('addressLine')||'',landmark:form.get('landmark')||'',city:method==='Delivery'?city:'',state:form.get('state')||'',pincode:method==='Delivery'?pincode:'',latitude:coordinates?.latitude??null,longitude:coordinates?.longitude??null};try{const r=await apiFetch(api+'/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw new Error(data.detail||data.title||'Order could not be placed. Please review your details and try again.');setCart([]);rememberOrder(data.orderNumber,data.trackingToken);nav('/track/'+data.orderNumber)}catch(err){setError(err.message||'Could not connect to the order service.')}finally{setLoading(false)}};const applyCoupon=async()=>{if(!couponCode.trim()){setCouponMessage('Enter a coupon code.');return}if(method==='Delivery'){setCouponMessage('Coupon will be checked with your delivery quote.');return}try{const r=await apiFetch('/api/coupons/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:couponCode,items:cart.map(i=>({productId:i.id,quantity:i.q}))})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Coupon is unavailable.');setCouponResult(d);setCouponMessage('Coupon applied.')}catch(e){setCouponResult(null);setCouponMessage(e.message)}};const now=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);return <><div className="pagehead"><small>SECURE CHECKOUT</small><h1>Review and place your order</h1><p>Clear totals. Cash on delivery. No online payment is configured yet.</p></div><form className="checkout" onSubmit={submit}><div className="panel checkout-main"><div className="checkout-steps"><span className="step active">1 <b>Fulfillment</b></span><span className="step">2 <b>Details</b></span><span className="step">3 <b>Review</b></span></div><h3>How would you like to receive your order?</h3><div className="fulfillment-choice"><label className={method==='Pickup'?'choice selected':'choice'}><input type="radio" name="fulfillment" value="Pickup" checked={method==='Pickup'} onChange={()=>setMethod('Pickup')}/><MapPin/><span><b>Pickup</b><small>Collect from OM Stationary</small></span></label><label className={method==='Delivery'?'choice selected':'choice'}><input type="radio" name="fulfillment" value="Delivery" checked={method==='Delivery'} onChange={()=>setMethod('Delivery')}/><Truck/><span><b>Delivery</b><small>Verified local shop stock only</small></span></label></div>{method==='Pickup'?<><PickupStation location={location}/><label className="field-label">Pickup date &amp; time<input name="pickupTime" type="datetime-local" min={now} required/></label></>:<><h3>Delivery address</h3>{!options.enabled?<div className="deliverybox"><b>Delivery setup is not complete</b><span>Delivery can be enabled after verified shop inventory, serviceable cities and delivery charges are configured.</span></div>:<><label className="field-label">Serviceable city<select value={city} onChange={e=>setCity(e.target.value)} required><option value="">Choose a city</option>{options.cities.map(c=><option key={c}>{c}</option>)}</select></label><div className="address-fields"><label className="field-label">Street address<input name="addressLine" required maxLength="300" placeholder="Building, street, area"/></label><label className="field-label">Landmark (optional)<input name="landmark" maxLength="100" placeholder="Nearby landmark"/></label><label className="field-label">State<input name="state" required maxLength="80" defaultValue="Bihar"/></label><label className="field-label">PIN code<input name="pincode" required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={pincode} onChange={e=>setPincode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="6 digit PIN code"/></label></div><div className="location-check"><button type="button" className="outline" disabled={locating} onClick={()=>{setGeoError('');if(!navigator.geolocation){setGeoError('Location is not available in this browser.');return}setLocating(true);navigator.geolocation.getCurrentPosition(position=>{setCoordinates({latitude:position.coords.latitude,longitude:position.coords.longitude});setLocating(false)},()=>{setGeoError('Location permission was declined or unavailable. You can allow it and try again.');setCoordinates(null);setLocating(false)},{enableHighAccuracy:true,timeout:10000,maximumAge:60000})}}>{locating?'Checking location?':coordinates?'Location confirmed ? Update':'Use my location to check delivery radius'}</button>{geoError&&<small role="alert">{geoError}</small>}<small>Location is requested only when you tap the button.</small></div><div className="deliverybox"><b>{quote?'Delivery quote ready':'Delivery availability'}</b><span>{quote?`Verified shop stock \u00b7 delivery charge \u20b9${quote.deliveryCharge}`:quoteError}</span></div></>}</>}<div className="coupon-entry"><label className="field-label">Coupon code<input value={couponCode} onChange={e=>{setCouponCode(e.target.value.toUpperCase());setCouponResult(null);setCouponMessage('')}} maxLength="40" placeholder="Enter code"/></label><button type="button" className="outline" onClick={applyCoupon}>Apply</button>{couponMessage&&<small role="status">{couponMessage}</small>}</div><h3>Your details</h3><div className="address-fields"><label className="field-label">Full name<input name="name" required maxLength="120" autoComplete="name" defaultValue={user?.fullName||user?.name||''} placeholder="Your name"/></label><label className="field-label">Mobile number<input name="phone" type="tel" required maxLength="20" autoComplete="tel" defaultValue={user?.phone||''} placeholder="Mobile for order updates"/></label><label className="field-label">Email address<input name="email" type="email" required maxLength="254" autoComplete="email" defaultValue={user?.email||''} placeholder="For your invoice and order updates"/></label><label className="field-label">Billing address (optional)<input name="billingAddress" maxLength="600" autoComplete="street-address" placeholder="Leave blank to use your delivery address"/></label></div><div className="cod-note"><ShieldCheck size={18}/><span><b>Cash on delivery</b><small>Pay when your order is delivered or collected. Online payment isn't active yet.</small></span></div></div><aside className="summary"><h3>Order summary</h3>{cart.map(i=><p key={i.id}><span>{i.name} &times; {i.q}</span><b>&#8377;{i.price*i.q}</b></p>)}<hr/><p><span>Items subtotal</span><b>&#8377;{quote?.subtotal??subtotal}</b></p><p><span>Delivery</span><b>{method==='Pickup'?'Free':quote?`\u20b9${quote.deliveryCharge}`:'Quoted after stock check'}</b></p><hr/><p className="total"><span>Total</span><b>&#8377;{quote?.total??couponResult?.total??(method==='Pickup'?subtotal:'?')}</b></p>{(quote?.discountAmount||couponResult?.discountAmount)>0&&<p><span>Coupon discount</span><b>&#8377;{quote?.discountAmount??couponResult?.discountAmount}</b></p>}{error&&<p role="alert" className="form-error">{error}</p>}<button className="btn wide" disabled={!available||!cart.length||loading}>{loading?'Placing order...':method==='Pickup'?'Place pickup order':'Place COD delivery order'}</button><small>Prices and stock are verified by the API before an order is saved.</small></aside></form></>}function InvoicePage(){
+  const {id}=useParams();
+  const [invoice,setInvoice]=useState(null);
+  const [error,setError]=useState('');
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    let active=true;
+    const token=localStorage.getItem('omtrack:'+id)||'';
+
+    apiFetch(api+'/api/orders/'+encodeURIComponent(id)+'/invoice',{
+      headers:{'X-Tracking-Token':token}
+    })
+    .then(async r=>{
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||d.title||'Invoice is not available yet.');
+      return d;
+    })
+    .then(d=>{
+      if(active) setInvoice(d);
+    })
+    .catch(e=>{
+      if(active) setError(e.message||'Invoice could not be loaded.');
+    })
+    .finally(()=>{
+      if(active) setLoading(false);
+    });
+
+    return ()=>{active=false};
+  },[id]);
+
+  if(loading){
+    return <div className="catalog-state">Preparing professional invoice…</div>;
+  }
+
+  if(error){
+    return (
+      <div className="empty">
+        <Receipt/>
+        <h1>Invoice</h1>
+        <p>{error}</p>
+        <Link className="btn" to="/orders">Go to orders</Link>
+      </div>
+    );
+  }
+
+  const lines=invoice?.items||invoice?.lines||[];
+  const subtotal=Number(invoice?.subtotal??invoice?.subTotal??0);
+  const gst=Number(invoice?.taxAmount??invoice?.gstAmount??0);
+  const total=Number(invoice?.grandTotal??invoice?.totalAmount??invoice?.total??0);
+
+  return (
+    <section className="invoice-page">
+      <div className="invoice-actions">
+        <Link className="outline" to="/">
+          <ArrowLeft size={16}/> Home
+        </Link>
+        <button className="btn" onClick={()=>window.print()}>
+          Print / Save PDF
+        </button>
+      </div>
+
+      <article className="professional-invoice">
+        <header className="invoice-header">
+          <div>
+            <div className="invoice-logo">OM<span>.</span></div>
+            <b>OM STATIONARY</b>
+            <small>Everything you need, one place.</small>
+          </div>
+
+          <div className="invoice-title">
+            <small>TAX INVOICE</small>
+            <h1>{invoice?.invoiceNumber||'OM-INV'}</h1>
+            <span>
+              {invoice?.invoiceDate
+                ? new Date(invoice.invoiceDate).toLocaleString('en-IN')
+                : new Date().toLocaleString('en-IN')}
+            </span>
+          </div>
+        </header>
+
+        <div className="invoice-meta-grid">
+          <div>
+            <b>OM Stationary</b>
+            <p>
+              G5JF+784, Ambedkar Rd, Sohgi, Bihar 800007<br/>
+              Opp. Shravani Enclave, Sampatchak, Patna, Bihar
+            </p>
+            <p>GST Rate: 0%</p>
+            <p>Udyam Registration: Configure in billing settings</p>
+          </div>
+
+          <div>
+            <b>Bill To</b>
+            <p>
+              {invoice?.customerName||invoice?.name||'-'}<br/>
+              {invoice?.customerEmail||invoice?.email||'-'}<br/>
+              {invoice?.customerPhone||invoice?.phone||'-'}
+            </p>
+            <p>{invoice?.billingAddress||invoice?.shippingAddress||''}</p>
+          </div>
+        </div>
+
+        <table className="invoice-table">
+          <thead>
+            <tr>
+              <th>S.No.</th>
+              <th>Item</th>
+              <th>HSN/SKU</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {lines.map((x,i)=>{
+              const q=Number(x.quantity||x.qty||1);
+              const rate=Number(x.unitPrice||x.price||0);
+
+              return (
+                <tr key={i}>
+                  <td>{i+1}</td>
+                  <td>{x.productName||x.name||'-'}</td>
+                  <td>{x.sku||x.hsn||'-'}</td>
+                  <td>{q}</td>
+                  <td>₹{rate.toFixed(2)}</td>
+                  <td>₹{(q*rate).toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="invoice-bottom">
+          <div>
+            <b>Payment</b>
+            <p>Method: {invoice?.paymentMethod||'-'}</p>
+            <p>Status: {invoice?.paymentStatus||'-'}</p>
+            <p>GST: 0% (₹{gst.toFixed(2)})</p>
+          </div>
+
+          <div className="invoice-totals">
+            <p>
+              <span>Subtotal</span>
+              <b>₹{subtotal.toFixed(2)}</b>
+            </p>
+
+            <p>
+              <span>GST (0%)</span>
+              <b>₹{gst.toFixed(2)}</b>
+            </p>
+
+            <p className="invoice-grand">
+              <span>Grand Total</span>
+              <b>₹{total.toFixed(2)}</b>
+            </p>
+          </div>
+        </div>
+
+        <footer>
+          Thank you for shopping with OM Stationary.
+        </footer>
+      </article>
+    </section>
+  );
+}
+function Track(){const id=useParams().id,location=usePickupLocation(),[order,setOrder]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');useEffect(()=>{let active=true;apiFetch(`${api}/api/orders/${encodeURIComponent(id)}`,{headers:{'X-Tracking-Token':localStorage.getItem(`omtrack:${id}`)||''}}).then(async r=>{if(r.status===404)throw new Error('We could not find that order number.');if(!r.ok)throw new Error('Could not load this order. Try again.');return r.json()}).then(d=>{if(active)setOrder(d)}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[id]);if(loading)return <div className="catalog-state">Loading order...</div>;if(error)return <div className="empty"><PackageCheck/><h1>Order lookup</h1><p>{error}</p><Link className="btn" to="/orders">Try another order</Link></div>;const pickup=order?.fulfillmentMethod==='Pickup';return <><div className="pagehead"><small>ORDER TRACKING</small><h1>Order {order.orderNumber}</h1><p>Placed {new Date(order.createdAt).toLocaleString()}</p>{order.requestedDeliveryDate&&<p>Pickup requested for {new Date(order.requestedDeliveryDate).toLocaleString()}</p>}</div><div className="tracking-layout"><section className="track"><div className="tracking-current"><span className="pill ok">{order.status}</span><p>{pickup?'Your order will be collected from OM Stationary.':'Your order is with the verified local fulfillment flow.'}</p></div><h3>Items</h3>{order.items?.map((i,n)=><div className="tracking-item" key={n}><span>{i.productName} &times; {i.quantity}</span><b>&#8377;{i.unitPrice*i.quantity}</b></div>)}<hr/><div className="tracking-item"><span>Items subtotal</span><b>&#8377;{order.subtotal}</b></div><div className="tracking-item"><span>Delivery</span><b>{order.deliveryCharge?`\u20b9${order.deliveryCharge}`:'Free'}</b></div><div className="tracking-item tracking-total"><span>Total &middot; {order.paymentMethod}</span><b>&#8377;{order.totalAmount}</b></div><p>Payment status: <b>{order.paymentStatus}</b></p></section>{pickup&&<PickupStation location={location} compact/>}</div></>}function FooterMap(){const location=usePickupLocation();return <footer className="site-footer"><div className="footer-brand"><b>OM STATIONARY</b><span>Everything you need, one place.</span><nav className="footer-links"><Link to="/">Home</Link><Link to="/search">Shop</Link><Link to="/orders">Orders</Link><Link to="/wishlist">Wishlist</Link><Link to="/account">Account</Link></nav><b>Customer Support</b>{location?.phone&&<><a href={`tel:${location.phone}`}>{location.phone}</a><a className="whatsapp-link" href={`https://wa.me/${location.phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a></>}{location?.email&&<a href={`mailto:${location.email}`}>{location.email}</a>}<span>&copy; 2026 OM Stationary</span></div><div className="footer-details"><section><h3>Visit Us</h3><b>OM Stationary</b><p>{location?.address||"Address will appear when configured."}</p>{location?.hours&&<p className="pickup-meta"><Clock size={15}/>{location.hours}</p>}</section><PickupStation location={location} compact/></div></footer>}
+
+createRoot(document.getElementById('root')).render(
+  <BrowserRouter>
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  </BrowserRouter>
+);
+
+

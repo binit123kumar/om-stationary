@@ -21,7 +21,9 @@ export function mapProduct(p) {
     stock: p.stock,
     lowStockThreshold: p.lowStockThreshold,
     images: p.images,
-    isActive: p.isActive
+    isActive: p.isActive,
+    createdAt: p.createdAt || p.CreatedAt,
+    updatedAt: p.updatedAt || p.UpdatedAt
   };
 }
 

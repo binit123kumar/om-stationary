@@ -1,6 +1,7 @@
 // Partner order card with the real order status actions
 // the partner state machine allows.
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { OrderStatusBadge } from '../orders/OrderStatusBadge.jsx';
 import { rupees } from '../../utils/formatCurrency.js';
 
@@ -18,6 +19,7 @@ export function PartnerOrderCard({ order, onStatus }) {
     }
   };
 
+  const actions = Array.isArray(order.nextStatuses) ? order.nextStatuses : ALLOWED_ACTIONS;
   return (
     <article className="partner-order">
       <div className="admin-order-head">
@@ -31,13 +33,14 @@ export function PartnerOrderCard({ order, onStatus }) {
         </div>
       </div>
       <p>{order.deliveryAddress}</p>
+      <Link to={`/partner/orders/${encodeURIComponent(order.id)}`}>View order details</Link>
       <div className="tracking-items">
         {(order.items || []).map((item, index) => (
           <small key={index}>{item.productName} × {item.quantity}</small>
         ))}
       </div>
       <div className="partner-actions">
-        {ALLOWED_ACTIONS.map((status) => (
+        {actions.map((status) => (
           <button
             key={status}
             className="outline"

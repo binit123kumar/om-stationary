@@ -13,13 +13,13 @@ const NAV = [
   { to: '/admin/payments', label: 'Payments' },
   { to: '/admin/coupons', label: 'Coupons' },
   { to: '/admin/delivery', label: 'Delivery' },
+  { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/partners', label: 'Partner shops' },
   { to: '/admin/reports', label: 'Reports' },
-  { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/notifications', label: 'Notifications' },
   { to: '/admin/whatsapp', label: 'WhatsApp' },
   { to: '/admin/settings', label: 'Settings' },
-  { to: '/admin/audit-logs', label: 'Audit logs' }
+  { to: '/admin/audit-log', label: 'Audit log' },
 ];
 
 export function AdminSidebar() {

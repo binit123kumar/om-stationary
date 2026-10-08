@@ -1,0 +1,4 @@
+import { usePartner } from '../../hooks/usePartner.js';
+import { rupeesShort } from '../../utils/formatCurrency.js';
+
+export function PartnerProductsPage() { const {inventory,error}=usePartner(); return <section className="account-page"><div className="pagehead"><small>PARTNER PORTAL</small><h1>Shop products</h1><p>Products available to manage in your shop inventory.</p></div>{error&&<p role="alert" className="form-error">{error}</p>}<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>Shop stock</th><th>Availability</th></tr></thead><tbody>{inventory.map(p=><tr key={p.productId}><td>{p.name}</td><td>{p.sku}</td><td>{p.category}</td><td>{rupeesShort(p.sellingPrice)}</td><td>{p.stock}</td><td>{p.isAvailable?'Available':'Unavailable'}</td></tr>)}</tbody></table>{!inventory.length&&!error&&<p>No inventory products are assigned to this shop.</p>}</div></section>; }

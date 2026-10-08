@@ -50,7 +50,8 @@ export function ProductDetailPage({ add, addN, catalog, wishlist, toggleWishlist
     );
   }
 
-  const buyNow = (p) => { add(p); navigate('/checkout'); };
+  const buyNow = (p, quantity = 1) => { (quantity > 1 ? addN(p, quantity) : add(p)); navigate('/checkout'); };
+  const addQuantity = (p, quantity) => addN ? addN(p, quantity) : add(p);
 
   return (
     <>
@@ -66,6 +67,7 @@ export function ProductDetailPage({ add, addN, catalog, wishlist, toggleWishlist
           wishlist={wishlist}
           toggleWishlist={toggleWishlist}
           onAdd={add}
+          onAddQuantity={addQuantity}
           onBuyNow={buyNow}
         />
       </section>

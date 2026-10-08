@@ -66,11 +66,11 @@ public sealed class AdminWhatsAppController(
                 configured = s.IsConfigured,
                 status = s.IsConfigured ? "Configured" : "Not configured",
                 missing = s.MissingSettings(),
-                provider = "WhatsApp Business Cloud API",
+                provider = s.Provider,
                 secretsExposed = false,
                 note = s.IsConfigured
                     ? "Credentials are present in server configuration. Messages will be sent through the WhatsApp Business Cloud API."
-                    : "WhatsApp Business API is not configured. Notifications are logged as NotConfigured and no message is sent. Orders continue to work normally."
+                    : "WhatsApp notification provider is not configured. No message was sent; orders continue to work normally."
             },
             eventTypes = new
             {

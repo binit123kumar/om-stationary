@@ -1,0 +1,6 @@
+import { useEffect, useState } from 'react';
+import { AdminLayout } from '../../components/admin/AdminLayout.jsx';
+import { adminHeaders, getAdminNotifications } from '../../services/adminService.js';
+import { readSession } from '../../services/session.js';
+
+export function AdminNotificationsPage({user,onLogout}) { const [data,setData]=useState(null); const [error,setError]=useState(''); useEffect(()=>{getAdminNotifications(adminHeaders(readSession())).then(setData).catch(e=>setError(e.message));},[]); return <AdminLayout user={user} onLogout={onLogout}><div className="pagehead"><small>ADMIN PANEL</small><h1>Notifications</h1><p>Operational alerts from live orders, inventory and payments.</p></div>{error&&<p role="alert" className="form-error">{error}</p>}{data&&<><section className="admin-kpis">{Object.entries(data.summary||{}).map(([key,value])=><article className="admin-kpi" key={key}><small>{key}</small><strong>{value}</strong></article>)}</section>{['orders','lowStock','payments'].map(key=><section key={key}><h2>{key==='lowStock'?'Low stock':key[0].toUpperCase()+key.slice(1)}</h2>{(data[key]||[]).length?<ul>{data[key].map((row,i)=><li key={row.id||i}>{row.orderNumber||row.name||row.productName||row.message||JSON.stringify(row)}</li>)}</ul>:<p>No current alerts.</p>}</section>)}</>}</AdminLayout>; }

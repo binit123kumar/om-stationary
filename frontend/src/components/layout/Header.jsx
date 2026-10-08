@@ -4,12 +4,13 @@ import {
   Bell, Heart, MapPin, Search, ShieldAlert, ShoppingCart, User
 } from 'lucide-react';
 import { useCategories } from '../../hooks/useCategories.js';
-import { useCatalog } from '../../hooks/useCatalog.js';
+import { MobileNav } from './MobileNav.jsx';
+import { TopNav } from './TopNav.jsx';
 
 export function Header({
   user,
-  cartCount,
-  wishlistCount,
+  cartCount = 0,
+  wishlistCount = 0,
   unreadCount,
   catalog
 }) {
@@ -38,9 +39,6 @@ export function Header({
             {(catalog?.products || []).map((p) => (
               <option key={p.id} value={p.name} />
             ))}
-            <option value="A4 Paper" />
-            <option value="Notebook" />
-            <option value="Office supplies" />
           </datalist>
           <button aria-label="Search">
             <Search size={18} />
@@ -73,7 +71,7 @@ export function Header({
         )}
       </div>
       <TopNav categories={categories} />
-      <MobileNav categories={categories} />
+      <MobileNav categories={categories} cartCount={cartCount} />
     </header>
   );
 }

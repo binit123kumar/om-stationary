@@ -12,15 +12,15 @@ using OMStationary.Api.Services;
 namespace OMStationary.Api.Controllers;
 
 [ApiController, Route("api/payments")]
-public sealed class PaymentsController(OmDbContext db, IConfiguration configuration, IPaymentGateway gateway,
-    NotificationService notifications) : ControllerBase
+public sealed class PaymentsController(OmDbContext db, IConfiguration configuration,
+    NotificationService notifications, StoreSettingsService storeSettings) : ControllerBase
 {
     /// <summary>
     /// Single source of truth for what the storefront may offer at checkout. The UI renders both
     /// payment choices from this response and never decides on its own that a payment succeeded.
     /// </summary>
     [HttpGet("options")]
-    public IActionResult Options()
+    public async Task<IActionResult> Options(CancellationToken cancellationToken)
     {
         static string Configured(string? value)
         {
@@ -28,17 +28,19 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
             return clean.Length == 0 || clean.StartsWith("[PUT ", StringComparison.OrdinalIgnoreCase) ? "" : clean;
         }
         var vpa = Configured(configuration["Payments:Upi:Vpa"]);
+        var taxRate = await storeSettings.GetTaxRatePercentAsync(cancellationToken);
         return Ok(new
         {
             cashOnDelivery = true,
-            onlineUpi = gateway.IsConfigured,
-            onlineProvider = gateway.IsConfigured ? gateway.Name : null,
+            onlineUpi = configuration.GetValue<bool>("Payments:Enabled") &&
+                string.Equals(configuration["Payments:Provider"], "UPI", StringComparison.OrdinalIgnoreCase) && vpa.Length > 0,
+            onlineProvider = "UPI",
             // A blank VPA must be reported as unconfigured, never replaced with a placeholder the
             // customer could scan.
             upiVpa = vpa,
             upiPayeeName = Configured(configuration["Payments:Upi:PayeeName"]),
-            verificationAvailable = gateway.IsConfigured,
-            taxRatePercent = configuration.GetValue<decimal>("Tax:RatePercent")
+            verificationAvailable = false,
+            taxRatePercent = taxRate
         });
     }
 
@@ -47,22 +49,30 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
     {
         var order = await db.Orders.Include(x => x.Items).FirstOrDefaultAsync(x => x.OrderNumber == orderNumber, cancellationToken);
         if (order is null || !CanAccess(order)) return NotFound();
-        if (!order.PaymentMethod.Equals("Paytm UPI", StringComparison.OrdinalIgnoreCase)) return BadRequest("This order does not use online UPI payment.");
+        if (!order.PaymentMethod.Equals("UPI", StringComparison.OrdinalIgnoreCase)) return BadRequest("This order does not use UPI payment.");
         if (order.PaymentStatus == "Paid") return Ok(new { status = "Paid", order.OrderNumber });
-        if (!gateway.IsConfigured) return Problem("Paytm UPI is not configured yet.", statusCode: 503);
-        var payment = await db.Payments.FirstOrDefaultAsync(x => x.OrderId == order.Id && x.Provider == "Paytm", cancellationToken);
+        var vpa = configuration["Payments:Upi:Vpa"]?.Trim() ?? "";
+        var payeeName = configuration["Payments:Upi:PayeeName"]?.Trim() ?? "OM Stationary";
+        if (!configuration.GetValue<bool>("Payments:Enabled") ||
+            !string.Equals(configuration["Payments:Provider"], "UPI", StringComparison.OrdinalIgnoreCase) || vpa.Length == 0)
+            return Problem("UPI payment initiation is not configured. Your order remains pending.", statusCode: 503);
+        var payment = await db.Payments.FirstOrDefaultAsync(x => x.OrderId == order.Id && x.Provider == "UPI", cancellationToken);
         if (payment is null) return Problem("Payment record is missing for this order.", statusCode: 409);
-        if (!string.IsNullOrWhiteSpace(payment.QrImageBase64))
-            return Ok(new { configured = true, provider = payment.Provider, status = payment.Status, qrData = payment.QrData, qrImageBase64 = payment.QrImageBase64 });
-        var intent = await gateway.CreateOrder(order.TotalAmount, order.OrderNumber, cancellationToken);
-        if (!intent.Configured) return Problem(intent.Detail ?? "Paytm could not create a payment QR.", statusCode: 503);
-        payment.ProviderReference = intent.ProviderOrderId;
-        payment.QrData = intent.QrData;
-        payment.QrImageBase64 = intent.QrImageBase64;
+        var query = string.Join("&", new[]
+        {
+            "pa=" + Uri.EscapeDataString(vpa),
+            "pn=" + Uri.EscapeDataString(payeeName),
+            "am=" + Uri.EscapeDataString(order.TotalAmount.ToString("0.00", CultureInfo.InvariantCulture)),
+            "cu=INR",
+            "tn=" + Uri.EscapeDataString("Order " + order.OrderNumber)
+        });
+        var upiUri = "upi://pay?" + query;
         payment.Status = "Pending";
+        payment.QrData = upiUri;
         notifications.AddForOrder(order, "PaymentPending");
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { configured = true, provider = intent.Provider, status = intent.Status, qrData = intent.QrData, qrImageBase64 = intent.QrImageBase64 });
+        return Ok(new { configured = true, provider = "UPI", status = "Pending", amount = order.TotalAmount,
+            orderNumber = order.OrderNumber, upiVpa = vpa, payeeName, upiUri, qrData = upiUri, verificationAvailable = false });
     }
 
     [HttpPost("orders/{orderNumber}/status"), EnableRateLimiting("tracking-reads")]
@@ -70,48 +80,8 @@ public sealed class PaymentsController(OmDbContext db, IConfiguration configurat
     {
         var order = await db.Orders.FirstOrDefaultAsync(x => x.OrderNumber == orderNumber, cancellationToken);
         if (order is null || !CanAccess(order)) return NotFound();
-        if (!order.PaymentMethod.Equals("Paytm UPI", StringComparison.OrdinalIgnoreCase)) return BadRequest("Payment verification is only available for Paytm UPI orders.");
-        if (order.PaymentStatus == "Paid") return Ok(new { status = "Paid", order.Status, order.PaymentStatus });
-
-        var gatewayStatus = await gateway.CheckStatus(order.OrderNumber, cancellationToken);
-        var payment = await db.Payments.FirstOrDefaultAsync(x => x.OrderId == order.Id && x.Provider == "Paytm", cancellationToken);
-        if (payment is null) return Problem("Payment record is missing for this order.", statusCode: 409);
-        if (!gatewayStatus.Verified) return Ok(new { status = payment.Status, paymentStatus = order.PaymentStatus, verified = false, detail = gatewayStatus.Detail });
-
-        var amountMatches = decimal.TryParse(gatewayStatus.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var verifiedAmount) &&
-                            verifiedAmount == order.TotalAmount && payment.Amount == order.TotalAmount;
-        if (gatewayStatus.Paid && !amountMatches)
-        {
-            payment.Status = "ReviewRequired";
-            await db.SaveChangesAsync(cancellationToken);
-            return Ok(new { status = "ReviewRequired", paymentStatus = order.PaymentStatus, verified = true, detail = "Paytm amount did not match the saved order total." });
-        }
-
-        var previousPaymentStatus = payment.Status;
-        payment.Status = gatewayStatus.Paid ? "Paid" : gatewayStatus.Status is "TXN_FAILURE" ? "Failed" : "Pending";
-        if (!string.IsNullOrWhiteSpace(gatewayStatus.ProviderReference)) payment.ProviderReference = gatewayStatus.ProviderReference;
-        if (gatewayStatus.Paid)
-        {
-            payment.PaidAt ??= DateTime.UtcNow;
-            order.PaymentStatus = "Paid";
-            if (order.Status is "Pending" or "Placed")
-            {
-                order.Status = "Confirmed";
-                db.OrderStatusHistory.Add(new OrderStatusHistory { OrderId = order.Id, Status = "Confirmed", Note = "Paytm status API verified payment." });
-                notifications.AddForOrder(order, "Confirmed");
-            }
-            var invoice = await db.Invoices.FirstOrDefaultAsync(x => x.OrderId == order.Id, cancellationToken);
-            if (invoice is not null) invoice.PaymentStatus = "Paid";
-            // Idempotent: only tell the customer once.
-            if (previousPaymentStatus != "Paid") notifications.AddForOrder(order, "PaymentSuccess");
-        }
-        else if (payment.Status == "Failed" && previousPaymentStatus != "Failed")
-        {
-            notifications.AddForOrder(order, "PaymentFailed");
-        }
-        await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { status = payment.Status, order.Status, order.PaymentStatus, verified = true,
-            invoiceNumber = await db.Invoices.Where(x => x.OrderId == order.Id).Select(x => x.InvoiceNumber).FirstOrDefaultAsync(cancellationToken) });
+        return Ok(new { status = order.PaymentStatus, orderStatus = order.Status, paymentStatus = order.PaymentStatus, verified = false,
+            detail = "UPI payment verification is not available yet. Payment remains pending." });
     }
 
     private bool CanAccess(Order order)

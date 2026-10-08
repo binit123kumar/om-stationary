@@ -21,6 +21,8 @@ export function usePartner() {
     if (o.ok) setOrders(await o.json());
     if (![s, i, o].every((x) => x.ok)) {
       setError('Could not load partner dashboard. Confirm this login is linked to a shop.');
+    } else {
+      setError('');
     }
   }, []);
 
@@ -28,7 +30,11 @@ export function usePartner() {
 
   const saveInventory = useCallback(async (entry) => {
     const response = await updatePartnerInventory(entry);
-    if (!response.ok) throw new Error('Could not update product inventory.');
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setError(body.detail || 'Could not update product inventory.');
+      return;
+    }
     await load();
   }, [load]);
 
@@ -36,7 +42,8 @@ export function usePartner() {
     const response = await updatePartnerOrderStatus(id, status);
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || 'Status update rejected.');
+      setError(body.detail || 'Status update rejected.');
+      return;
     }
     await load();
   }, [load]);

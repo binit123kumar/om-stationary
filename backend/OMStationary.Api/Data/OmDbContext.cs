@@ -190,6 +190,8 @@ public class OmDbContext : DbContext
         modelBuilder.Entity<StoreSetting>().Property(x => x.PickupHours).HasMaxLength(200);
         modelBuilder.Entity<StoreSetting>().Property(x => x.DeliveryCities).HasMaxLength(1000);
         modelBuilder.Entity<StoreSetting>().Property(x => x.PaymentProvider).HasMaxLength(40);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.DeliveryCharge).HasPrecision(18, 2);
+        modelBuilder.Entity<StoreSetting>().Property(x => x.TaxRatePercent).HasPrecision(18, 2);
         modelBuilder.Entity<StoreSetting>().HasIndex(x => x.UpdatedAt);
         modelBuilder.Entity<WhatsAppNotification>().HasIndex(x => x.CreatedAt);
         modelBuilder.Entity<WhatsAppNotification>().HasIndex(x => x.Status);

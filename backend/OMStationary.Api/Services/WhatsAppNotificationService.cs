@@ -23,6 +23,7 @@ public sealed class WhatsAppOptions
     public const string SectionName = "WhatsApp";
 
     public bool Enabled { get; set; }
+    public string Provider { get; set; } = "Your API";
     public string AdminNumber { get; set; } = "";
     public string PhoneNumberId { get; set; } = "";
     public string BusinessAccountId { get; set; } = "";
@@ -55,6 +56,7 @@ public sealed class WhatsAppOptions
         get
         {
             if (!Enabled) return false;
+            if (!Provider.Equals("WhatsApp Business Cloud API", StringComparison.OrdinalIgnoreCase)) return false;
             if (!IsPhoneNumber(AdminNumber)) return false;
             if (PhoneNumberId.Trim().Length == 0) return false;
             if (AccessToken.Trim().Length == 0) return false;
@@ -67,6 +69,7 @@ public sealed class WhatsAppOptions
     {
         var missing = new List<string>();
         if (!Enabled) missing.Add("WhatsApp:Enabled");
+        if (!Provider.Equals("WhatsApp Business Cloud API", StringComparison.OrdinalIgnoreCase)) missing.Add("WhatsApp:Provider");
         if (!IsPhoneNumber(AdminNumber)) missing.Add("WhatsApp:AdminNumber");
         if (PhoneNumberId.Trim().Length == 0) missing.Add("WhatsApp:PhoneNumberId");
         if (AccessToken.Trim().Length == 0) missing.Add("WhatsApp:AccessToken");
@@ -78,7 +81,10 @@ public sealed class WhatsAppOptions
     public static string Normalise(string? value)
     {
         var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
-        return digits.Length == 10 ? "91" + digits : digits;
+        if (digits.StartsWith("00", StringComparison.Ordinal)) digits = digits[2..];
+        if (digits.Length == 11 && digits[0] == '0') digits = digits[1..];
+        if (digits.Length == 10) return "91" + digits;
+        return digits;
     }
 
     public static bool IsPhoneNumber(string? value)
