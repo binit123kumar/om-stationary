@@ -1,6 +1,6 @@
 // Product listing / search page.
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search as SearchIcon } from 'lucide-react';
 import { ProductCard } from '../../components/products/ProductCard.jsx';
 import { ProductFilters } from '../../components/products/ProductFilters.jsx';
@@ -10,6 +10,7 @@ import { PAGE_SIZE } from '../../utils/constants.js';
 
 export function ProductListingPage({ add, addN, catalog, wishlist, toggleWishlist }) {
   const route = useLocation();
+  const navigate = useNavigate();
   const params = new URLSearchParams(route.search);
   const q = (params.get('q') || '').trim();
   const cat = params.get('cat') || '';
@@ -46,15 +47,21 @@ export function ProductListingPage({ add, addN, catalog, wishlist, toggleWishlis
 
   return (
     <>
-      <div className="pagehead">
+      <div className="pagehead listing-pagehead">
         <small>PRODUCTS</small>
         <h1>{debounced ? `Results for "${debounced}"` : cat || 'Shop all products'}</h1>
+        <p>Browse stationery and office essentials from the current OM Stationary catalogue.</p>
       </div>
 
       <ProductFilters
         categories={categories}
         category={cat}
-        onCategory={(value) => { setPage(1); }}
+        onCategory={(value) => {
+          setPage(1);
+          const next = new URLSearchParams(route.search);
+          if (value) next.set('cat', value); else next.delete('cat');
+          navigate({ pathname: '/search', search: next.toString() ? `?${next}` : '' });
+        }}
         brand={brand}
         onBrand={(value) => { setPage(1); setBrand(value); }}
         minPrice={minPrice}
@@ -73,13 +80,13 @@ export function ProductListingPage({ add, addN, catalog, wishlist, toggleWishlis
       />
 
       {error
-        ? <div className="catalog-state error" role="alert">{error}</div>
+        ? <div className="catalog-state error" role="alert"><strong>Products could not be loaded.</strong><p>{error}</p><button className="outline" type="button" onClick={() => window.location.reload()}>Try again</button></div>
         : loading
-          ? <div className="catalog-state">Loading products...</div>
+          ? <div className="catalog-state" role="status" aria-live="polite">Loading products…</div>
           : items.length
             ? (
               <>
-                <div className="grid">
+                <div className="listing-product-grid grid" aria-label="Products">
                   {items.map((product) => (
                     <ProductCard
                       key={product.id}

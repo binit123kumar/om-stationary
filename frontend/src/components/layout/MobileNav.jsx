@@ -12,7 +12,7 @@ const LINKS = [
   { to: '/account', label: 'Account' }
 ];
 
-export function MobileNav({ categories = [] }) {
+export function MobileNav({ categories = [], cartCount = 0 }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -28,7 +28,7 @@ export function MobileNav({ categories = [] }) {
       </button>
       <div className="mobile-nav-links">
         <Link to="/cart" className="mobile-nav-cart" aria-label="Cart">
-          <ShoppingCart size={18} />
+          <ShoppingCart size={18} /><span className="badge">{cartCount}</span>
         </Link>
         <Link to="/account" className="mobile-nav-account" aria-label="Account">
           <User size={18} />

@@ -2,11 +2,12 @@
 // All data comes through props — nothing is hardcoded.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Heart, PackageCheck, Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { ProductImage } from './ProductImage.jsx';
 import { ProductPrice } from './ProductPrice.jsx';
 import { ProductQuantity } from './ProductQuantity.jsx';
 import { ProductWishlistButton } from './ProductWishlistButton.jsx';
+import { ProductStock } from './ProductStock.jsx';
 
 export function ProductCard({ product: p, add, addN, saved = false, toggleWishlist }) {
   const [qty, setQty] = useState(1);
@@ -26,13 +27,13 @@ export function ProductCard({ product: p, add, addN, saved = false, toggleWishli
         toggleWishlist={toggleWishlist}
       />
       <div className="pad">
-        <small>{p.cat}</small>
+        <small className="product-card-meta">{p.brand || p.cat}</small>
         <Link className="pname" to={'/product/' + p.id}>{p.name}</Link>
         <ProductPrice price={p.price} mrp={p.mrp} discount={discount} />
-        <p className="stock-note">Availability confirmed when your order is placed</p>
+        <ProductStock product={p} />
         <div className="add-row">
           <ProductQuantity quantity={qty} onChange={setQty} />
-          <button className="add" onClick={addQty}>
+          <button className="add" type="button" onClick={addQty} disabled={p.stock !== undefined && Number(p.stock) <= 0}>
             <Plus size={16} /> Add <span className="added-preview">{qty}</span>
           </button>
         </div>
