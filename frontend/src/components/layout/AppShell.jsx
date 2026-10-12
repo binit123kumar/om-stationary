@@ -7,6 +7,7 @@ import { useCategories } from '../../hooks/useCategories.js';
 import { useNotifications } from '../../hooks/useNotifications.js';
 import { Header } from './Header.jsx';
 import { FooterMap } from './FooterMap.jsx';
+import { PwaExperience } from './PwaExperience.jsx';
 
 export const AppShellContext = createContext(null);
 
@@ -137,6 +138,7 @@ export function AppShell() {
       <Header user={user} catalog={catalog} cartCount={cart.reduce((sum, item) => sum + item.q, 0)} wishlistCount={wishlist.length} unreadCount={notifications.unread} />
       <main><Outlet /></main>
       <FooterMap />
+      <PwaExperience />
     </AppShellContext.Provider>
   );
 }

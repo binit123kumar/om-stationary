@@ -1,0 +1,44 @@
+# DeliveryDetailPage.jsx
+
+**Source:** `frontend/src/pages/delivery/DeliveryDetailPage.jsx`  
+**Classification:** Routed page source
+**Route classification:** /delivery/:id (ProtectedRoute role: DeliveryPartner)
+**Shared shell:** App.jsx nests declared routes beneath AppShell and AppErrorBoundary; AppShell renders Header, main/Outlet, FooterMap, and PwaExperience.
+
+## Source-grounded summary
+
+**Purpose:** DeliveryDetailPage is the routed page component identified by its source declaration and route mapping above. Directly composed UI and imports are recorded below; no behavior is inferred beyond source.
+
+## UI and composition
+
+- JSX component tags: Link, DeliveryCard
+- JSX text-region fragments (lexical; may include expressions): ?String(x.id)===String(id)); return?; `DELIVERY PARTNER`; `Delivery details`; `Assigned deliveries`; `{error&&`; `{error}`; `}{d`?; `:!error&&`; `Loading delivery or this assignment is unavailable.`
+
+## Declarations and dependencies
+
+- Exports: DeliveryDetailPage
+- Named function-like declarations: DeliveryDetailPage
+- Direct local imports: DeliveryCard -> components/delivery/DeliveryCard.jsx; useDeliveryAssignments -> hooks/useDelivery.js
+- Direct static consumers (impact): RouteView.jsx
+
+## Props, hooks, and API usage
+
+- First named function-like declaration parameters: (none declared)
+- React hooks/state APIs: useParams, useDeliveryAssignments
+- State bindings found in useState/useReducer pair destructuring: None detected.
+- API path literals in this file: None; calls may be delegated to imported hooks/services.
+- Direct imports that can carry data/API behavior: useDeliveryAssignments -> hooks/useDelivery.js
+
+## Behavior, errors, security, and maintenance
+
+- Statically observed calls: DeliveryDetailPage, useParams, useDeliveryAssignments, find, String
+- Error/control-flow markers: No explicit try/throw/finally token found.
+- Browser storage / network / navigation markers: None found directly.
+- External service/backend behavior is source-derived only; API/backend/data integration is **not runtime-verified**.
+- Maintenance boundary: update this module in its existing source role; route wiring lives in App.jsx + RouteView.jsx, shared state in AppShell/hooks, remote calls in services. (The last clauses indicate repository boundaries, not proof of runtime behavior.)
+- Tests: No frontend *.test.* or *.spec.* files were found in the inspected frontend tree.
+
+
+## Function/method details
+
+See the [per-declaration index](../../functions-methods/frontend/pages/delivery/DeliveryDetailPage.jsx/_index.md) for one report per statically identified named declaration in this source file.

@@ -320,9 +320,9 @@ internal static class OrderMessages
         if (!string.IsNullOrWhiteSpace(o.Pincode)) b.Line("PIN " + o.Pincode);
         b.Line();
         b.Line("*Items:*");
-        var n = 1;
+        var itemNumber = 1;
         foreach (var item in o.Items)
-            b.Line($"{n++}. {item.ProductName} \u00d7 {item.Quantity} = {Money(item.UnitPrice * item.Quantity)}");
+            b.Line($"{itemNumber++}. {item.ProductName} \u00d7 {item.Quantity} = {Money(item.UnitPrice * item.Quantity)}");
         b.Line();
         b.Field("Subtotal", Money(o.Subtotal));
         b.Field("Discount", Money(o.DiscountAmount));

@@ -267,48 +267,48 @@ public sealed class AdminReportsController(OmDbContext db) : ControllerBase
     public async Task<IActionResult> Reports([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         if (!TryRange(from, to, out var start, out var endExclusive, out var problem)) return BadRequest(new { detail = problem });
-        var data = await BuildReport(start, endExclusive);
-        return Ok(data);
+        var reportData = await BuildReport(start, endExclusive);
+        return Ok(reportData);
     }
     /// <summary>CSV export of one report. Rendered server-side so totals stay authoritative.</summary>
     [HttpGet("reports/export")]
     public async Task<IActionResult> ExportReports([FromQuery] string report = "sales", [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         if (!TryRange(from, to, out var start, out var endExclusive, out var problem)) return BadRequest(new { detail = problem });
-        var d = await BuildReport(start, endExclusive);
+        var reportData = await BuildReport(start, endExclusive);
         string[] header;
         IEnumerable<string[]> rows;
         switch (report.ToLowerInvariant())
         {
             case "orders":
                 header = ["Status", "Orders", "Amount"];
-                rows = d.Orders.Select(x => new[] { x.Status, x.Count.ToString(CultureInfo.InvariantCulture), x.Amount.ToString("N2", CultureInfo.InvariantCulture) });
+                rows = reportData.Orders.Select(x => new[] { x.Status, x.Count.ToString(CultureInfo.InvariantCulture), x.Amount.ToString("N2", CultureInfo.InvariantCulture) });
                 break;
             case "customers":
                 header = ["Customer", "Mobile", "Orders", "Value"];
-                rows = d.Customers.Select(x => new[] { x.Name, x.Phone, x.Orders.ToString(CultureInfo.InvariantCulture), x.Value.ToString("N2", CultureInfo.InvariantCulture) });
+                rows = reportData.Customers.Select(x => new[] { x.Name, x.Phone, x.Orders.ToString(CultureInfo.InvariantCulture), x.Value.ToString("N2", CultureInfo.InvariantCulture) });
                 break;
             case "products":
                 header = ["Product", "SKU", "Quantity", "Revenue"];
-                rows = d.Products.Select(x => new[] { x.Name, x.Sku, x.Quantity.ToString(CultureInfo.InvariantCulture), x.Revenue.ToString("N2", CultureInfo.InvariantCulture) });
+                rows = reportData.Products.Select(x => new[] { x.Name, x.Sku, x.Quantity.ToString(CultureInfo.InvariantCulture), x.Revenue.ToString("N2", CultureInfo.InvariantCulture) });
                 break;
             case "inventory":
                 header = ["Product", "SKU", "Category", "Stock", "Threshold", "Active", "UnitPrice", "StockValue"];
-                rows = d.Inventory.Select(x => new[] { x.Name, x.Sku, x.Category, x.Stock.ToString(CultureInfo.InvariantCulture),
+                rows = reportData.Inventory.Select(x => new[] { x.Name, x.Sku, x.Category, x.Stock.ToString(CultureInfo.InvariantCulture),
                     x.Threshold.ToString(CultureInfo.InvariantCulture), x.Active ? "Yes" : "No",
                     x.Price.ToString("N2", CultureInfo.InvariantCulture), x.StockValue.ToString("N2", CultureInfo.InvariantCulture) });
                 break;
             case "payments":
                 header = ["PaymentMethod", "PaymentStatus", "Count", "Amount"];
-                rows = d.Payments.Select(x => new[] { x.Method, x.Status, x.Count.ToString(CultureInfo.InvariantCulture), x.Amount.ToString("N2", CultureInfo.InvariantCulture) });
+                rows = reportData.Payments.Select(x => new[] { x.Method, x.Status, x.Count.ToString(CultureInfo.InvariantCulture), x.Amount.ToString("N2", CultureInfo.InvariantCulture) });
                 break;
             case "delivery":
                 header = ["SourceType", "Status", "Count"];
-                rows = d.Delivery.Select(x => new[] { x.Source, x.Status, x.Count.ToString(CultureInfo.InvariantCulture) });
+                rows = reportData.Delivery.Select(x => new[] { x.Source, x.Status, x.Count.ToString(CultureInfo.InvariantCulture) });
                 break;
             default:
                 header = ["Metric", "Value"];
-                rows = d.SalesRows.Select(x => new[] { x.Metric, x.Value });
+                rows = reportData.SalesRows.Select(x => new[] { x.Metric, x.Value });
                 break;
         }
         var builder = new StringBuilder();

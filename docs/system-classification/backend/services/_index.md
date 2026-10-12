@@ -1,0 +1,139 @@
+﻿# Backend services and callable reports
+
+Service and helper behavior is documented per method below; each method report links directly to its source file. The existing codebase-reference reports supplied secondary indexes and are not runtime evidence. No tests were run.
+
+## Individual methods
+
+| Report | Callable |
+|---|---|
+| [CouponService.CouponService.Calculate](methods/CouponService.CouponService.Calculate.md) | `CouponService.CouponService.Calculate` |
+| [CouponService.CouponService.TryRedeem](methods/CouponService.CouponService.TryRedeem.md) | `CouponService.CouponService.TryRedeem` |
+| [EmailNotificationService.EmailNotificationService.NotifyAdminOrderCreatedAsync](methods/EmailNotificationService.EmailNotificationService.NotifyAdminOrderCreatedAsync.md) | `EmailNotificationService.EmailNotificationService.NotifyAdminOrderCreatedAsync` |
+| [EmailNotificationService.EmailNotificationService.NotifyOrderCreatedAsync](methods/EmailNotificationService.EmailNotificationService.NotifyOrderCreatedAsync.md) | `EmailNotificationService.EmailNotificationService.NotifyOrderCreatedAsync` |
+| [EmailNotificationService.EmailNotificationService.NotifyOrderStatusAsync](methods/EmailNotificationService.EmailNotificationService.NotifyOrderStatusAsync.md) | `EmailNotificationService.EmailNotificationService.NotifyOrderStatusAsync` |
+| [EmailNotificationService.EmailNotificationService.NotifyPaymentReceivedAsync](methods/EmailNotificationService.EmailNotificationService.NotifyPaymentReceivedAsync.md) | `EmailNotificationService.EmailNotificationService.NotifyPaymentReceivedAsync` |
+| [EmailNotificationService.EmailNotificationService.SendAsync](methods/EmailNotificationService.EmailNotificationService.SendAsync.md) | `EmailNotificationService.EmailNotificationService.SendAsync` |
+| [FulfillmentSelection.FirstPartyFulfillmentProvider.EstimateMinutes](methods/FulfillmentSelection.FirstPartyFulfillmentProvider.EstimateMinutes.md) | `FulfillmentSelection.FirstPartyFulfillmentProvider.EstimateMinutes` |
+| [FulfillmentSelection.FirstPartyFulfillmentProvider.FindCandidates](methods/FulfillmentSelection.FirstPartyFulfillmentProvider.FindCandidates.md) | `FulfillmentSelection.FirstPartyFulfillmentProvider.FindCandidates` |
+| [FulfillmentSelection.FulfillmentSelectionService.SelectAsync](methods/FulfillmentSelection.FulfillmentSelectionService.SelectAsync.md) | `FulfillmentSelection.FulfillmentSelectionService.SelectAsync` |
+| [GeoDistance.GeoDistance.Kilometers](methods/GeoDistance.GeoDistance.Kilometers.md) | `GeoDistance.GeoDistance.Kilometers` |
+| [InvoiceService.InvoicePdf.BuildPdf](methods/InvoiceService.InvoicePdf.BuildPdf.md) | `InvoiceService.InvoicePdf.BuildPdf` |
+| [InvoiceService.InvoicePdf.Line](methods/InvoiceService.InvoicePdf.Line.md) | `InvoiceService.InvoicePdf.Line` |
+| [InvoiceService.InvoicePdf.Money](methods/InvoiceService.InvoicePdf.Money.md) | `InvoiceService.InvoicePdf.Money` |
+| [InvoiceService.InvoicePdf.Render](methods/InvoiceService.InvoicePdf.Render.md) | `InvoiceService.InvoicePdf.Render` |
+| [InvoiceService.InvoicePdf.Text](methods/InvoiceService.InvoicePdf.Text.md) | `InvoiceService.InvoicePdf.Text` |
+| [InvoiceService.InvoicePdf.Total](methods/InvoiceService.InvoicePdf.Total.md) | `InvoiceService.InvoicePdf.Total` |
+| [InvoiceService.InvoiceService.CreateOnceAsync](methods/InvoiceService.InvoiceService.CreateOnceAsync.md) | `InvoiceService.InvoiceService.CreateOnceAsync` |
+| [InvoiceService.InvoiceService.RenderAsync](methods/InvoiceService.InvoiceService.RenderAsync.md) | `InvoiceService.InvoiceService.RenderAsync` |
+| [JwtAuthenticationHandler.JwtAuthenticationHandler.HandleAuthenticateAsync](methods/JwtAuthenticationHandler.JwtAuthenticationHandler.HandleAuthenticateAsync.md) | `JwtAuthenticationHandler.JwtAuthenticationHandler.HandleAuthenticateAsync` |
+| [NotificationService.NotificationService.AddForOrder](methods/NotificationService.NotificationService.AddForOrder.md) | `NotificationService.NotificationService.AddForOrder` |
+| [NotificationService.NotificationService.MessageFor](methods/NotificationService.NotificationService.MessageFor.md) | `NotificationService.NotificationService.MessageFor` |
+| [OrderStateMachine.OrderStateMachine.CanTransition](methods/OrderStateMachine.OrderStateMachine.CanTransition.md) | `OrderStateMachine.OrderStateMachine.CanTransition` |
+| [OrderStateMachine.OrderStateMachine.NextStatuses](methods/OrderStateMachine.OrderStateMachine.NextStatuses.md) | `OrderStateMachine.OrderStateMachine.NextStatuses` |
+| [PaymentProviders.CodPaymentProvider.CreatePendingPayment](methods/PaymentProviders.CodPaymentProvider.CreatePendingPayment.md) | `PaymentProviders.CodPaymentProvider.CreatePendingPayment` |
+| [PaymentProviders.UnconfiguredPaymentGateway.CheckStatus](methods/PaymentProviders.UnconfiguredPaymentGateway.CheckStatus.md) | `PaymentProviders.UnconfiguredPaymentGateway.CheckStatus` |
+| [PaymentProviders.UnconfiguredPaymentGateway.CreateOrder](methods/PaymentProviders.UnconfiguredPaymentGateway.CreateOrder.md) | `PaymentProviders.UnconfiguredPaymentGateway.CreateOrder` |
+| [PaymentProviders.UnconfiguredPaymentGateway.VerifyCallback](methods/PaymentProviders.UnconfiguredPaymentGateway.VerifyCallback.md) | `PaymentProviders.UnconfiguredPaymentGateway.VerifyCallback` |
+| [PaytmQrPaymentGateway.PaytmChecksum.Generate](methods/PaytmQrPaymentGateway.PaytmChecksum.Generate.md) | `PaytmQrPaymentGateway.PaytmChecksum.Generate` |
+| [PaytmQrPaymentGateway.PaytmChecksum.ValidateKey](methods/PaytmQrPaymentGateway.PaytmChecksum.ValidateKey.md) | `PaytmQrPaymentGateway.PaytmChecksum.ValidateKey` |
+| [PaytmQrPaymentGateway.PaytmChecksum.Verify](methods/PaytmQrPaymentGateway.PaytmChecksum.Verify.md) | `PaytmQrPaymentGateway.PaytmChecksum.Verify` |
+| [PaytmQrPaymentGateway.PaytmQrPaymentGateway.CheckStatus](methods/PaytmQrPaymentGateway.PaytmQrPaymentGateway.CheckStatus.md) | `PaytmQrPaymentGateway.PaytmQrPaymentGateway.CheckStatus` |
+| [PaytmQrPaymentGateway.PaytmQrPaymentGateway.CreateOrder](methods/PaytmQrPaymentGateway.PaytmQrPaymentGateway.CreateOrder.md) | `PaytmQrPaymentGateway.PaytmQrPaymentGateway.CreateOrder` |
+| [PaytmQrPaymentGateway.PaytmQrPaymentGateway.VerifyCallback](methods/PaytmQrPaymentGateway.PaytmQrPaymentGateway.VerifyCallback.md) | `PaytmQrPaymentGateway.PaytmQrPaymentGateway.VerifyCallback` |
+| [SettlementService.SettlementService.CreateForDeliveredOrder](methods/SettlementService.SettlementService.CreateForDeliveredOrder.md) | `SettlementService.SettlementService.CreateForDeliveredOrder` |
+| [SmsNotificationService.SmsNotificationService.NormalizePhoneNumber](methods/SmsNotificationService.SmsNotificationService.NormalizePhoneNumber.md) | `SmsNotificationService.SmsNotificationService.NormalizePhoneNumber` |
+| [SmsNotificationService.SmsNotificationService.NotifyAdminOrderCreatedAsync](methods/SmsNotificationService.SmsNotificationService.NotifyAdminOrderCreatedAsync.md) | `SmsNotificationService.SmsNotificationService.NotifyAdminOrderCreatedAsync` |
+| [SmsNotificationService.SmsNotificationService.NotifyOrderCreatedAsync](methods/SmsNotificationService.SmsNotificationService.NotifyOrderCreatedAsync.md) | `SmsNotificationService.SmsNotificationService.NotifyOrderCreatedAsync` |
+| [SmsNotificationService.SmsNotificationService.NotifyOrderStatusAsync](methods/SmsNotificationService.SmsNotificationService.NotifyOrderStatusAsync.md) | `SmsNotificationService.SmsNotificationService.NotifyOrderStatusAsync` |
+| [SmsNotificationService.SmsNotificationService.NotifyPaymentReceivedAsync](methods/SmsNotificationService.SmsNotificationService.NotifyPaymentReceivedAsync.md) | `SmsNotificationService.SmsNotificationService.NotifyPaymentReceivedAsync` |
+| [SmsNotificationService.SmsNotificationService.SendAsync](methods/SmsNotificationService.SmsNotificationService.SendAsync.md) | `SmsNotificationService.SmsNotificationService.SendAsync` |
+| [StockAlertService.StockAlertService.NotifyLowStockIfNeededAsync](methods/StockAlertService.StockAlertService.NotifyLowStockIfNeededAsync.md) | `StockAlertService.StockAlertService.NotifyLowStockIfNeededAsync` |
+| [StoreSettingsService.StoreSettingsService.Clean](methods/StoreSettingsService.StoreSettingsService.Clean.md) | `StoreSettingsService.StoreSettingsService.Clean` |
+| [StoreSettingsService.StoreSettingsService.CleanOrNull](methods/StoreSettingsService.StoreSettingsService.CleanOrNull.md) | `StoreSettingsService.StoreSettingsService.CleanOrNull` |
+| [StoreSettingsService.StoreSettingsService.FormatMoney](methods/StoreSettingsService.StoreSettingsService.FormatMoney.md) | `StoreSettingsService.StoreSettingsService.FormatMoney` |
+| [StoreSettingsService.StoreSettingsService.gatewayConfigured](methods/StoreSettingsService.StoreSettingsService.gatewayConfigured.md) | `StoreSettingsService.StoreSettingsService.gatewayConfigured` |
+| [StoreSettingsService.StoreSettingsService.GetAsync](methods/StoreSettingsService.StoreSettingsService.GetAsync.md) | `StoreSettingsService.StoreSettingsService.GetAsync` |
+| [StoreSettingsService.StoreSettingsService.GetOverrideAsync](methods/StoreSettingsService.StoreSettingsService.GetOverrideAsync.md) | `StoreSettingsService.StoreSettingsService.GetOverrideAsync` |
+| [StoreSettingsService.StoreSettingsService.GetTaxRatePercentAsync](methods/StoreSettingsService.StoreSettingsService.GetTaxRatePercentAsync.md) | `StoreSettingsService.StoreSettingsService.GetTaxRatePercentAsync` |
+| [StoreSettingsService.StoreSettingsService.Pick](methods/StoreSettingsService.StoreSettingsService.Pick.md) | `StoreSettingsService.StoreSettingsService.Pick` |
+| [TaxCalculator.TaxCalculator.Calculate](methods/TaxCalculator.TaxCalculator.Calculate.md) | `TaxCalculator.TaxCalculator.Calculate` |
+| [TokenService.TokenService.Base64Url](methods/TokenService.TokenService.Base64Url.md) | `TokenService.TokenService.Base64Url` |
+| [TokenService.TokenService.CreateAccessToken](methods/TokenService.TokenService.CreateAccessToken.md) | `TokenService.TokenService.CreateAccessToken` |
+| [TokenService.TokenService.DecodeBase64Url](methods/TokenService.TokenService.DecodeBase64Url.md) | `TokenService.TokenService.DecodeBase64Url` |
+| [TokenService.TokenService.HashToken](methods/TokenService.TokenService.HashToken.md) | `TokenService.TokenService.HashToken` |
+| [TokenService.TokenService.NewRefreshToken](methods/TokenService.TokenService.NewRefreshToken.md) | `TokenService.TokenService.NewRefreshToken` |
+| [TokenService.TokenService.SignatureMatches](methods/TokenService.TokenService.SignatureMatches.md) | `TokenService.TokenService.SignatureMatches` |
+| [TokenService.TokenService.SigningKey](methods/TokenService.TokenService.SigningKey.md) | `TokenService.TokenService.SigningKey` |
+| [WhatsAppNotificationService.OrderMessages.Field](methods/WhatsAppNotificationService.OrderMessages.Field.md) | `WhatsAppNotificationService.OrderMessages.Field` |
+| [WhatsAppNotificationService.OrderMessages.Line.no-args](methods/WhatsAppNotificationService.OrderMessages.Line.no-args.md) | `WhatsAppNotificationService.OrderMessages.Line.no-args` |
+| [WhatsAppNotificationService.OrderMessages.Line.text](methods/WhatsAppNotificationService.OrderMessages.Line.text.md) | `WhatsAppNotificationService.OrderMessages.Line.text` |
+| [WhatsAppNotificationService.OrderMessages.LowStock](methods/WhatsAppNotificationService.OrderMessages.LowStock.md) | `WhatsAppNotificationService.OrderMessages.LowStock` |
+| [WhatsAppNotificationService.OrderMessages.Money](methods/WhatsAppNotificationService.OrderMessages.Money.md) | `WhatsAppNotificationService.OrderMessages.Money` |
+| [WhatsAppNotificationService.OrderMessages.NewCustomer](methods/WhatsAppNotificationService.OrderMessages.NewCustomer.md) | `WhatsAppNotificationService.OrderMessages.NewCustomer` |
+| [WhatsAppNotificationService.OrderMessages.NewOrder](methods/WhatsAppNotificationService.OrderMessages.NewOrder.md) | `WhatsAppNotificationService.OrderMessages.NewOrder` |
+| [WhatsAppNotificationService.OrderMessages.Payment](methods/WhatsAppNotificationService.OrderMessages.Payment.md) | `WhatsAppNotificationService.OrderMessages.Payment` |
+| [WhatsAppNotificationService.OrderMessages.Status](methods/WhatsAppNotificationService.OrderMessages.Status.md) | `WhatsAppNotificationService.OrderMessages.Status` |
+| [WhatsAppNotificationService.OrderMessages.When](methods/WhatsAppNotificationService.OrderMessages.When.md) | `WhatsAppNotificationService.OrderMessages.When` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.ExtractMessageId](methods/WhatsAppNotificationService.WhatsAppNotificationService.ExtractMessageId.md) | `WhatsAppNotificationService.WhatsAppNotificationService.ExtractMessageId` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.NotifyLowStockAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.NotifyLowStockAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.NotifyLowStockAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.NotifyNewCustomerAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.NotifyNewCustomerAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.NotifyNewCustomerAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderCreatedAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderCreatedAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderCreatedAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderStatusAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderStatusAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.NotifyOrderStatusAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.NotifyPaymentReceivedAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.NotifyPaymentReceivedAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.NotifyPaymentReceivedAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.SendAsync](methods/WhatsAppNotificationService.WhatsAppNotificationService.SendAsync.md) | `WhatsAppNotificationService.WhatsAppNotificationService.SendAsync` |
+| [WhatsAppNotificationService.WhatsAppNotificationService.Summarise](methods/WhatsAppNotificationService.WhatsAppNotificationService.Summarise.md) | `WhatsAppNotificationService.WhatsAppNotificationService.Summarise` |
+| [WhatsAppNotificationService.WhatsAppOptions.Allow](methods/WhatsAppNotificationService.WhatsAppOptions.Allow.md) | `WhatsAppNotificationService.WhatsAppOptions.Allow` |
+| [WhatsAppNotificationService.WhatsAppOptions.IsPhoneNumber](methods/WhatsAppNotificationService.WhatsAppOptions.IsPhoneNumber.md) | `WhatsAppNotificationService.WhatsAppOptions.IsPhoneNumber` |
+| [WhatsAppNotificationService.WhatsAppOptions.MissingSettings](methods/WhatsAppNotificationService.WhatsAppOptions.MissingSettings.md) | `WhatsAppNotificationService.WhatsAppOptions.MissingSettings` |
+| [WhatsAppNotificationService.WhatsAppOptions.Normalise](methods/WhatsAppNotificationService.WhatsAppOptions.Normalise.md) | `WhatsAppNotificationService.WhatsAppOptions.Normalise` |
+
+## Declared service/support types
+
+| Report | Type |
+|---|---|
+| [CouponService.CouponCalculation](types/CouponService.CouponCalculation.md) | `CouponService.CouponCalculation` |
+| [CouponService.CouponService](types/CouponService.CouponService.md) | `CouponService.CouponService` |
+| [EmailNotificationService.EmailNotificationService](types/EmailNotificationService.EmailNotificationService.md) | `EmailNotificationService.EmailNotificationService` |
+| [EmailNotificationService.EmailOptions](types/EmailNotificationService.EmailOptions.md) | `EmailNotificationService.EmailOptions` |
+| [EmailNotificationService.EmailSendResult](types/EmailNotificationService.EmailSendResult.md) | `EmailNotificationService.EmailSendResult` |
+| [EmailNotificationService.IEmailNotificationService](types/EmailNotificationService.IEmailNotificationService.md) | `EmailNotificationService.IEmailNotificationService` |
+| [FulfillmentSelection.FirstPartyFulfillmentProvider](types/FulfillmentSelection.FirstPartyFulfillmentProvider.md) | `FulfillmentSelection.FirstPartyFulfillmentProvider` |
+| [FulfillmentSelection.FulfillmentCandidate](types/FulfillmentSelection.FulfillmentCandidate.md) | `FulfillmentSelection.FulfillmentCandidate` |
+| [FulfillmentSelection.FulfillmentRequest](types/FulfillmentSelection.FulfillmentRequest.md) | `FulfillmentSelection.FulfillmentRequest` |
+| [FulfillmentSelection.FulfillmentSelectionService](types/FulfillmentSelection.FulfillmentSelectionService.md) | `FulfillmentSelection.FulfillmentSelectionService` |
+| [FulfillmentSelection.IFulfillmentProvider](types/FulfillmentSelection.IFulfillmentProvider.md) | `FulfillmentSelection.IFulfillmentProvider` |
+| [FulfillmentSelection.RequestedProduct](types/FulfillmentSelection.RequestedProduct.md) | `FulfillmentSelection.RequestedProduct` |
+| [GeoDistance.GeoDistance](types/GeoDistance.GeoDistance.md) | `GeoDistance.GeoDistance` |
+| [InvoiceService.InvoicePdf](types/InvoiceService.InvoicePdf.md) | `InvoiceService.InvoicePdf` |
+| [InvoiceService.InvoiceService](types/InvoiceService.InvoiceService.md) | `InvoiceService.InvoiceService` |
+| [InvoiceService.Page](types/InvoiceService.Page.md) | `InvoiceService.Page` |
+| [JwtAuthenticationHandler.JwtAuthenticationHandler](types/JwtAuthenticationHandler.JwtAuthenticationHandler.md) | `JwtAuthenticationHandler.JwtAuthenticationHandler` |
+| [NotificationService.NotificationService](types/NotificationService.NotificationService.md) | `NotificationService.NotificationService` |
+| [OrderStateMachine.OrderStateMachine](types/OrderStateMachine.OrderStateMachine.md) | `OrderStateMachine.OrderStateMachine` |
+| [PaymentProviders.CodPaymentProvider](types/PaymentProviders.CodPaymentProvider.md) | `PaymentProviders.CodPaymentProvider` |
+| [PaymentProviders.GatewayPaymentIntent](types/PaymentProviders.GatewayPaymentIntent.md) | `PaymentProviders.GatewayPaymentIntent` |
+| [PaymentProviders.GatewayPaymentStatus](types/PaymentProviders.GatewayPaymentStatus.md) | `PaymentProviders.GatewayPaymentStatus` |
+| [PaymentProviders.ICodPaymentProvider](types/PaymentProviders.ICodPaymentProvider.md) | `PaymentProviders.ICodPaymentProvider` |
+| [PaymentProviders.IPaymentGateway](types/PaymentProviders.IPaymentGateway.md) | `PaymentProviders.IPaymentGateway` |
+| [PaymentProviders.IPaymentProvider](types/PaymentProviders.IPaymentProvider.md) | `PaymentProviders.IPaymentProvider` |
+| [PaymentProviders.UnconfiguredPaymentGateway](types/PaymentProviders.UnconfiguredPaymentGateway.md) | `PaymentProviders.UnconfiguredPaymentGateway` |
+| [PaytmQrPaymentGateway.PaytmChecksum](types/PaytmQrPaymentGateway.PaytmChecksum.md) | `PaytmQrPaymentGateway.PaytmChecksum` |
+| [PaytmQrPaymentGateway.PaytmQrPaymentGateway](types/PaytmQrPaymentGateway.PaytmQrPaymentGateway.md) | `PaytmQrPaymentGateway.PaytmQrPaymentGateway` |
+| [SettlementService.SettlementService](types/SettlementService.SettlementService.md) | `SettlementService.SettlementService` |
+| [SmsNotificationService.ISmsNotificationService](types/SmsNotificationService.ISmsNotificationService.md) | `SmsNotificationService.ISmsNotificationService` |
+| [SmsNotificationService.SmsNotificationService](types/SmsNotificationService.SmsNotificationService.md) | `SmsNotificationService.SmsNotificationService` |
+| [SmsNotificationService.SmsOptions](types/SmsNotificationService.SmsOptions.md) | `SmsNotificationService.SmsOptions` |
+| [SmsNotificationService.SmsSendResult](types/SmsNotificationService.SmsSendResult.md) | `SmsNotificationService.SmsSendResult` |
+| [StockAlertService.StockAlertService](types/StockAlertService.StockAlertService.md) | `StockAlertService.StockAlertService` |
+| [StoreSettingsService.EffectiveStoreSettings](types/StoreSettingsService.EffectiveStoreSettings.md) | `StoreSettingsService.EffectiveStoreSettings` |
+| [StoreSettingsService.StoreSettingsService](types/StoreSettingsService.StoreSettingsService.md) | `StoreSettingsService.StoreSettingsService` |
+| [TaxCalculator.TaxCalculator](types/TaxCalculator.TaxCalculator.md) | `TaxCalculator.TaxCalculator` |
+| [TokenService.TokenService](types/TokenService.TokenService.md) | `TokenService.TokenService` |
+| [WhatsAppNotificationService.IWhatsAppNotificationService](types/WhatsAppNotificationService.IWhatsAppNotificationService.md) | `WhatsAppNotificationService.IWhatsAppNotificationService` |
+| [WhatsAppNotificationService.OrderMessages](types/WhatsAppNotificationService.OrderMessages.md) | `WhatsAppNotificationService.OrderMessages` |
+| [WhatsAppNotificationService.WhatsAppHttpClient](types/WhatsAppNotificationService.WhatsAppHttpClient.md) | `WhatsAppNotificationService.WhatsAppHttpClient` |
+| [WhatsAppNotificationService.WhatsAppNotificationService](types/WhatsAppNotificationService.WhatsAppNotificationService.md) | `WhatsAppNotificationService.WhatsAppNotificationService` |
+| [WhatsAppNotificationService.WhatsAppOptions](types/WhatsAppNotificationService.WhatsAppOptions.md) | `WhatsAppNotificationService.WhatsAppOptions` |
+| [WhatsAppNotificationService.WhatsAppSendResult](types/WhatsAppNotificationService.WhatsAppSendResult.md) | `WhatsAppNotificationService.WhatsAppSendResult` |
+
+Source files: 17 under `backend/OMStationary.Api/Services/`. Method and type counts are report counts (different from count of service source files).
