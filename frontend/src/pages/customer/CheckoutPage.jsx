@@ -143,22 +143,22 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
     return true;
   }, [cart.length, placing, fulfillment, quote, pickupSlot]);
 
-  const setDetail = (key) => (value) => {
+  const updateCheckoutDetail = (key) => (value) => {
     setDetails((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => (current[key] ? { ...current, [key]: '' } : current));
   };
 
-  const validate = () => {
-    const found = validateCheckoutDetails(details, fulfillment, pickupSlot);
+  const validateCheckoutForm = () => {
+    const validationErrors = validateCheckoutDetails(details, fulfillment, pickupSlot);
     if (fulfillment === 'Delivery' && !coordinates) {
-      found.pincode = found.pincode || 'Share your location so the store can confirm the delivery distance.';
+      validationErrors.pincode = validationErrors.pincode || 'Share your location so the store can confirm the delivery distance.';
     }
-    setFieldErrors(found);
-    return Object.keys(found).length === 0;
+    setFieldErrors(validationErrors);
+    return Object.keys(validationErrors).length === 0;
   };
 
-  const requestQuote = async () => {
-    if (!validate()) return;
+  const requestDeliveryQuote = async () => {
+    if (!validateCheckoutForm()) return;
     setQuoting(true);
     setError('');
     try {
@@ -180,9 +180,9 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
         setQuoteError(await readFailure(response, 'Could not check delivery availability.'));
         return;
       }
-      const data = await response.json();
-      setQuote(data.available ? data : null);
-      setQuoteError(data.available ? '' : data.reason || 'Delivery is not available for this address right now.');
+      const deliveryQuote = await response.json();
+      setQuote(deliveryQuote.available ? deliveryQuote : null);
+      setQuoteError(deliveryQuote.available ? '' : deliveryQuote.reason || 'Delivery is not available for this address right now.');
     } catch {
       setQuote(null);
       setQuoteError('Could not reach the delivery service. Please try again.');
@@ -193,7 +193,7 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
 
   const placeOrder = async () => {
     if (placing) return;
-    if (!validate()) { setError('Please correct the highlighted fields.'); return; }
+    if (!validateCheckoutForm()) { setError('Please correct the highlighted fields.'); return; }
     if (fulfillment === 'Delivery' && !quote?.available) {
       setError('Please refresh the delivery quote before placing the order.');
       return;
@@ -229,17 +229,17 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
         setError(await readFailure(response, 'Your order could not be placed. Please try again.'));
         return;
       }
-      const created = await response.json();
+      const createdOrder = await response.json();
       // Persist the tracking token the API returned so the customer can
       // return to this real order.
-      rememberOrder(created.orderNumber, created.trackingToken);
+      rememberOrder(createdOrder.orderNumber, createdOrder.trackingToken);
       // The payment step reads the confirmed order from the API using the
       // tracking token, so nothing is passed through the URL payload.
       onCartCleared?.();
       navigate(
         payment === 'UPI'
-          ? `/payment?order=${encodeURIComponent(created.orderNumber)}`
-          : `/order-success?order=${encodeURIComponent(created.orderNumber)}`,
+          ? `/payment?order=${encodeURIComponent(createdOrder.orderNumber)}`
+          : `/order-success?order=${encodeURIComponent(createdOrder.orderNumber)}`,
         { replace: true }
       );
     } catch {
@@ -326,10 +326,10 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
               quote={quote}
               quoteError={quoteError}
               onField={(key, value) => {
-                setDetail(key)(value);
+                updateCheckoutDetail(key)(value);
               }}
               onRequestLocation={requestLocation}
-              onRequestQuote={requestQuote}
+              onRequestQuote={requestDeliveryQuote}
             />
           )}
         </div>
@@ -340,7 +340,7 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
             details={details}
             errors={fieldErrors}
             onChange={(key, value) => {
-              setDetail(key)(value);
+              updateCheckoutDetail(key)(value);
             }}
           />
           {fulfillment === 'Delivery' && (
@@ -350,7 +350,7 @@ export function CheckoutPage({ cart, user, onCartCleared }) {
                 value={details.billingAddress}
                 maxLength={600}
                 placeholder="Leave blank to use your delivery address"
-                onChange={(event) => setDetail('billingAddress')(event.target.value)}
+                onChange={(event) => updateCheckoutDetail('billingAddress')(event.target.value)}
               />
             </label>
           )}

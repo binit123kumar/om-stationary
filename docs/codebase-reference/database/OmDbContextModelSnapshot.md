@@ -1,0 +1,8 @@
+﻿# EF Core model snapshot
+
+- **Identity:** `backend/OMStationary.Api/Migrations/OmDbContextModelSnapshot.cs`.
+- **Purpose:** Current model metadata emitted by EF Core scaffolding; design-time expected model, not a live database introspection.
+- **Entity names parsed:** OMStationary.Api.Models.Address, OMStationary.Api.Models.AppRole, OMStationary.Api.Models.ApplicationUser, OMStationary.Api.Models.AuditLog, OMStationary.Api.Models.Cart, OMStationary.Api.Models.CartItem, OMStationary.Api.Models.Category, OMStationary.Api.Models.Coupon, OMStationary.Api.Models.CustomerProfile, OMStationary.Api.Models.Delivery, OMStationary.Api.Models.DeliveryPartner, OMStationary.Api.Models.DeliveryStatusHistory, OMStationary.Api.Models.Invoice, OMStationary.Api.Models.InvoiceLine, OMStationary.Api.Models.Notification, OMStationary.Api.Models.Order, OMStationary.Api.Models.OrderItem, OMStationary.Api.Models.OrderStatusHistory, OMStationary.Api.Models.PartnerShop, OMStationary.Api.Models.Payment, OMStationary.Api.Models.Product, OMStationary.Api.Models.ProductImage, OMStationary.Api.Models.RefreshToken, OMStationary.Api.Models.Refund, OMStationary.Api.Models.Settlement, OMStationary.Api.Models.ShopProduct, OMStationary.Api.Models.StoreSetting, OMStationary.Api.Models.WhatsAppNotification, OMStationary.Api.Models.Wishlist, OMStationary.Api.Models.WishlistItem
+- **Target model version:** 10.0.0
+- **Test evidence:** NOT TESTED; snapshot comparison/migration generation not run.
+- **Maintenance:** Update through EF migration workflow and review snapshot vs ``OmDbContext.OnModelCreating`` and migration operations; do not hand-treat as deployed-schema truth.

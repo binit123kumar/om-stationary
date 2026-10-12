@@ -1,0 +1,13 @@
+﻿# JwtAuthenticationHandler
+
+- **Identity:** `class JwtAuthenticationHandler` in `backend/OMStationary.Api/Services/JwtAuthenticationHandler.cs`.
+- **Source implementation:** [`JwtAuthenticationHandler.cs`](../../../../../backend/OMStationary.Api/Services/JwtAuthenticationHandler.cs).
+- **Purpose (simple Hinglish):** Yeh `JwtAuthenticationHandler` service/helper implementation hai; source-defined fields, routes, ya persistence mapping is report me listed hain.
+- **Constructor inputs:** IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder, IConfiguration configuration, OmDbContext db) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder
+- **Routes/security attributes:** None declared.
+- **Declared properties:** No public property/expression property parsed.
+- **Named callable methods:** HandleAuthenticateAsync
+- **Dependencies/data effects:** Source is authoritative; entity/mapping notes describe intended model semantics, not live schema state.
+- **Test evidence:** Identified test source methods are documented separately; test execution was not performed.
+- **Maintenance:** Keep implementation, migrations and snapshot in sync; never infer current database/runtime state from this reference.
+

@@ -1,0 +1,23 @@
+# rupees (exported)
+
+**Source identity:** `frontend/src/utils/formatCurrency.js`, declaration at line 3  
+**Declaration kind:** named arrow/function-valued variable  
+**Module report:** [formatCurrency.md](../../../../hooks-context/utils/formatCurrency.md)
+
+## Signature and responsibility
+
+- **Name:** `rupees` (exported).
+- **Parameters:** `value`
+- **Simple Hinglish responsibility:** Named helper. Hinglish: `rupees` body ke direct calls Number, toLocaleString hain; 0 return statement(s) statically identified.
+
+## Source flow and effects
+
+- **Flow / return:** No explicit return statement identified in the extracted body.
+- **Direct call identifiers in this body:** Number, toLocaleString
+- **Effects visible in this body:** No network, browser-storage, state-update, navigation, or browser-global marker identified.
+- **Error-flow markers visible in this body:** No explicit try/catch/throw/finally marker identified.
+- **Verified static import callers:** components/checkout/CodConfirmation.jsx, components/checkout/CouponBox.jsx, components/checkout/OrderSummary.jsx, components/checkout/PlaceOrderButton.jsx, components/checkout/UpiPaymentPanel.jsx, components/delivery/DeliveryCard.jsx, components/invoice/InvoiceItemsTable.jsx, components/invoice/InvoiceTotals.jsx, components/orders/OrderSummary.jsx, components/orders/TrackingTimeline.jsx, components/partner/PartnerOrderCard.jsx, pages/admin/AdminOrderDetailPage.jsx, pages/customer/CheckoutPage.jsx, pages/customer/PaymentPage.jsx
+
+## Lexical limitations
+
+One named declaration, identified by lexical source scan. Line/return/call markers are static source readings, not an AST or control-flow proof. Complex syntax, JSX, template literals, nested callbacks, comments and regex literals can affect extraction. Anonymous arrow callbacks are listed in the per-source index, not analyzed as separate named reports. API/backend/data behavior is **not runtime-verified**.

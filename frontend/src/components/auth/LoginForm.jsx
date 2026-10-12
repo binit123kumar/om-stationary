@@ -39,7 +39,7 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
 
   useEffect(() => { setErrors({}); setError(''); }, [registerMode]);
 
-  const set = (key) => (event) => {
+  const updateAuthField = (key) => (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => (current[key] ? { ...current, [key]: '' } : current));
@@ -52,39 +52,39 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
   // *adds*): merge would sum a guest row into a server row that already holds
   // the same items and silently double them. Taking the larger of the two
   // quantities per product is idempotent, so signing in twice is a no-op.
-  const completeAuth = async (session) => {
-    saveSession(session);
-    let cart = [];
+  const completeAuthentication = async (authSession) => {
+    saveSession(authSession);
+    let authenticatedCart = [];
     try {
-      let guest = [];
-      try { guest = JSON.parse(localStorage.getItem('omcart') || '[]'); } catch { guest = []; }
-      if (!Array.isArray(guest)) guest = [];
-      const guestRows = guest.map((item) => ({
+      let guestCart = [];
+      try { guestCart = JSON.parse(localStorage.getItem('omcart') || '[]'); } catch { guestCart = []; }
+      if (!Array.isArray(guestCart)) guestCart = [];
+      const guestCartRows = guestCart.map((item) => ({
         productId: item.id,
         quantity: Math.min(99, Number(item.q) || 1)
       }));
-      const synced = await mergeGuestCart(guestRows, session.accessToken);
-      if (synced.ok) cart = mapServerCart((await synced.json()).items);
+      const cartSyncResponse = await mergeGuestCart(guestCartRows, authSession.accessToken);
+      if (cartSyncResponse.ok) authenticatedCart = mapServerCart((await cartSyncResponse.json()).items);
       else {
         // The replace was rejected (e.g. a guest item was deactivated). Fall back
         // to whatever the server still considers this customer's cart rather than
         // showing stale local rows.
-        const retry = await fetch(`${apiBase}/api/cart`, {
-          headers: { Authorization: `Bearer ${session.accessToken}` }
+        const serverCartResponse = await fetch(`${apiBase}/api/cart`, {
+          headers: { Authorization: `Bearer ${authSession.accessToken}` }
         });
-        if (retry.ok) cart = mapServerCart((await retry.json()).items);
+        if (serverCartResponse.ok) authenticatedCart = mapServerCart((await serverCartResponse.json()).items);
       }
     } catch { /* keep the device cart that is already loaded in the shell */ }
-    onAuth?.(session.user, cart);
-    return cart;
+    onAuth?.(authSession.user, authenticatedCart);
+    return authenticatedCart;
   };
 
-  const submit = async (event) => {
+  const submitAuthForm = async (event) => {
     event.preventDefault();
     if (busy) return;
-    const found = registerMode ? validateRegister(form) : validateLogin(form);
-    setErrors(found);
-    if (Object.keys(found).length) { setError('Please correct the highlighted fields.'); return; }
+    const validationErrors = registerMode ? validateRegister(form) : validateLogin(form);
+    setErrors(validationErrors);
+    if (Object.keys(validationErrors).length) { setError('Please correct the highlighted fields.'); return; }
 
     setBusy(true);
     setError('');
@@ -97,15 +97,15 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
           password: form.password
         })
         : await login(form.identifier.trim(), form.password);
-      const data = await response.json().catch(() => ({}));
+      const authSession = await response.json().catch(() => ({}));
       if (!response.ok) {
         // 400/409 carry a specific detail worth showing; a network failure does not.
-        const detail = data.detail || (Array.isArray(data.errors) && data.errors.length ? data.errors[0]?.msg : '') || '';
+        const detail = authSession.detail || (Array.isArray(authSession.errors) && authSession.errors.length ? authSession.errors[0]?.msg : '') || '';
         if (response.status === 0 || response.type === 'error') throw new Error('Could not reach the account service. Please try again.');
         throw new Error(detail || (registerMode ? 'Registration failed. Please try again.' : 'Sign in failed. Please try again.'));
       }
 
-      await completeAuth(data);
+      await completeAuthentication(authSession);
 
       if (registerMode) {
         // The popup is shown only because the API confirmed the account was created.
@@ -113,8 +113,8 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
       } else {
         navigate(returnTo, { replace: true });
       }
-    } catch (e) {
-      setError(e?.message || 'Could not connect to the account service.');
+    } catch (authError) {
+      setError(authError?.message || 'Could not connect to the account service.');
     } finally {
       setBusy(false);
     }
@@ -126,13 +126,13 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
     navigate(returnTo === '/' ? '/' : returnTo, { replace: true });
   };
 
-  const field = (key, label, extra = {}) => (
+  const renderAuthField = (key, label, extra = {}) => (
     <label key={key}>
       {label}
       <input
         name={key}
         value={form[key]}
-        onChange={set(key)}
+        onChange={updateAuthField(key)}
         aria-invalid={errors[key] ? 'true' : undefined}
         {...extra}
       />
@@ -155,29 +155,29 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
           ? 'Join OM Stationary to keep your cart, addresses and orders together.'
           : 'Sign in to continue your shopping securely. Your cart stays exactly as it is.'}</p>
 
-        <form className="auth-3d-form" onSubmit={submit} noValidate>
-          {registerMode && field('fullName', 'Full Name', {
+        <form className="auth-3d-form" onSubmit={submitAuthForm} noValidate>
+          {registerMode && renderAuthField('fullName', 'Full Name', {
             required: true, maxLength: 120, autoComplete: 'name', placeholder: 'Your full name'
           })}
           {registerMode
-            ? field('email', 'Email Address', {
+            ? renderAuthField('email', 'Email Address', {
               type: 'email', required: true, maxLength: 254, autoComplete: 'email', placeholder: 'you@example.com'
             })
-            : field('identifier', 'Email or Mobile', {
+            : renderAuthField('identifier', 'Email or Mobile', {
               type: 'text', required: true, maxLength: 254, autoComplete: 'username',
               placeholder: 'you@example.com or 9876543210'
             })}
-          {registerMode && field('phone', 'Mobile Number', {
+          {registerMode && renderAuthField('phone', 'Mobile Number', {
             type: 'tel', required: true, maxLength: 15, inputMode: 'numeric',
             autoComplete: 'tel', placeholder: '10 digit mobile number'
           })}
           <PasswordField
             value={form.password}
-            onChange={set('password')}
+            onChange={updateAuthField('password')}
             error={errors.password}
             registerMode={registerMode}
           />
-          {registerMode && field('confirmPassword', 'Confirm Password', {
+          {registerMode && renderAuthField('confirmPassword', 'Confirm Password', {
             type: 'password', required: true, maxLength: PASSWORD_MAX,
             autoComplete: 'new-password', placeholder: 'Re-enter your password'
           })}
@@ -187,7 +187,7 @@ export function LoginForm({ onAuth, register: registerMode = false }) {
                 type="checkbox"
                 name="acceptTerms"
                 checked={form.acceptTerms}
-                onChange={set('acceptTerms')}
+                onChange={updateAuthField('acceptTerms')}
               />
               <span>
                 I agree to the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>{' '}

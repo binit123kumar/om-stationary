@@ -1,0 +1,26 @@
+# useOrders (exported)
+
+**Source identity:** `frontend/src/hooks/useOrders.js`, declaration at line 11  
+**Declaration kind:** function declaration  
+**Module report:** [useOrders.md](../../../../hooks-context/hooks/useOrders.md)
+
+## Signature and responsibility
+
+- **Name:** `useOrders` (exported).
+- **Parameters:** `user`
+- **Simple Hinglish responsibility:** Hook-shaped function. Hinglish: `useOrders` application values/hook state ko compose karta hai; direct body calls are useState, useEffect, setLoading, async, getCustomerOrders, json, setRecent, isArray, readRecentOrders, all, map, getOrderByNumber, readTrackingToken, then, filter, load.
+
+## Source flow and effects
+
+- **Flow / return:** 3 explicit return statement(s) identified.
+- **Return at source:** `L26: (bare return)`
+- **Return at source:** `L37: () => { active = false; }`
+- **Return at source:** `L41: { recent, loading }`
+- **Direct call identifiers in this body:** useState, useEffect, setLoading, async, getCustomerOrders, json, setRecent, isArray, readRecentOrders, all, map, getOrderByNumber, readTrackingToken, then, filter, load
+- **Effects visible in this body:** state update or dispatch
+- **Error-flow markers visible in this body:** catch (1)
+- **Verified static import callers:** pages/customer/OrdersPage.jsx
+
+## Lexical limitations
+
+One named declaration, identified by lexical source scan. Line/return/call markers are static source readings, not an AST or control-flow proof. Complex syntax, JSX, template literals, nested callbacks, comments and regex literals can affect extraction. Anonymous arrow callbacks are listed in the per-source index, not analyzed as separate named reports. API/backend/data behavior is **not runtime-verified**.

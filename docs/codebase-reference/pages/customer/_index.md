@@ -1,0 +1,28 @@
+# Frontend pages: customer
+
+**Source modules documented:** 24
+
+- [`pages/customer/AboutPage.jsx`](AboutPage.md)
+- [`pages/customer/AccountPage.jsx`](AccountPage.md)
+- [`pages/customer/CartPage.jsx`](CartPage.md)
+- [`pages/customer/CheckoutPage.jsx`](CheckoutPage.md)
+- [`pages/customer/ContactPage.jsx`](ContactPage.md)
+- [`pages/customer/content.js`](content.md)
+- [`pages/customer/HelpPage.jsx`](HelpPage.md)
+- [`pages/customer/HomePage.jsx`](HomePage.md)
+- [`pages/customer/InvoicePage.jsx`](InvoicePage.md)
+- [`pages/customer/LegalContent.jsx`](LegalContent.md)
+- [`pages/customer/LegalPages.jsx`](LegalPages.md)
+- [`pages/customer/LoginPage.jsx`](LoginPage.md)
+- [`pages/customer/NotificationsPage.jsx`](NotificationsPage.md)
+- [`pages/customer/OrdersPage.jsx`](OrdersPage.md)
+- [`pages/customer/OrderSuccessPage.jsx`](OrderSuccessPage.md)
+- [`pages/customer/PaymentPage.jsx`](PaymentPage.md)
+- [`pages/customer/PrivacyPage.jsx`](PrivacyPage.md)
+- [`pages/customer/ProductDetailPage.jsx`](ProductDetailPage.md)
+- [`pages/customer/ProductListingPage.jsx`](ProductListingPage.md)
+- [`pages/customer/RefundPolicyPage.jsx`](RefundPolicyPage.md)
+- [`pages/customer/RegisterPage.jsx`](RegisterPage.md)
+- [`pages/customer/TermsPage.jsx`](TermsPage.md)
+- [`pages/customer/TrackOrderPage.jsx`](TrackOrderPage.md)
+- [`pages/customer/WishlistPage.jsx`](WishlistPage.md)
